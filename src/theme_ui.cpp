@@ -103,7 +103,6 @@ void ThemeUI::paint(HDC dc, const RECT& bounds, bool enabled, int language) cons
         line(dc, 42, 36, 62, 58, p.accent, 2); line(dc, 62, 36, 42, 58, p.accent, 2);
         line(dc, 38, 51, 47, 59, p.accent, 2); line(dc, 58, 59, 66, 51, p.accent, 2);
     } else {
-        fill(draw->hdc, draw->rc, p.panel);
         roundBox(dc, {28,26,76,74}, p.accent, p.accent, 14);
         text(dc, L"M", {28,26,76,74}, headingFont, p.accentInk, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     }
@@ -137,6 +136,7 @@ LRESULT ThemeUI::button(NMCUSTOMDRAW* draw, ButtonRole role, bool listening) con
         }
         box.left += 29; text(draw->hdc, label, box, bodyFont, disabled ? p.muted : p.text);
     } else {
+        fill(draw->hdc, draw->rc, p.panel);
         const bool primary = role == ButtonRole::Primary;
         auto surface = primary ? p.accent : (hot || pressed || listening) ? p.hover : p.control;
         auto edge = (primary || listening || hot) ? p.accent : p.border;
