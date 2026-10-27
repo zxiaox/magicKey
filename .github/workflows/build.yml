@@ -1,0 +1,59 @@
+name: Build and release MagicKey
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -A x64
+      - name: Validate release version
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          $header = Get-Content build/generated/app_config.hpp -Raw
+          $version = [regex]::Match($header, '#define MAGICKEY_VERSION "([0-9]+\.[0-9]+\.[0-9]+)"').Groups[1].Value
+          if ($env:RELEASE_TAG -cne "v$version") { throw "Release tag must match CMake version v$version" }
+      - name: Build portable executable
+        run: cmake --build build --config Release
+      - name: Run tests
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Test updater on Windows
+        shell: pwsh
+        run: ./tests/windows-updater-smoke.ps1 -Executable build/Release/MagicKey.exe
+      - name: Package portable app
+        shell: pwsh
+        run: ./packaging/package-windows.ps1 -Executable build/Release/MagicKey.exe -OutputDirectory dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MagicKey-windows-x64-portable
+          path: dist/*
+          if-no-files-found: error
+  release:
+    needs: windows
+    if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: MagicKey-windows-x64-portable
+          path: dist
+      - name: Publish release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$RELEASE_TAG" --verify-tag --draft --title "MagicKey $RELEASE_TAG" --notes-file packaging/RELEASE-NOTES.md dist/MagicKey.exe dist/MagicKey.exe.sha256 dist/MagicKey-windows-x64-portable.zip dist/MagicKey-windows-x64-portable.zip.sha256
+          gh release edit "$RELEASE_TAG" --draft=false --latest

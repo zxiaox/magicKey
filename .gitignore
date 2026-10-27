@@ -1,0 +1,10 @@
+/build/
+/build-windows/
+/build-windows.log
+/build-cross/
+/dist/
+*.exe
+*.exe.backup
+.MagicKey-update-*/
+*.profiles
+*.profiles.tmp
