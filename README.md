@@ -7,6 +7,7 @@ A portable, native Windows keyboard remapper. No installer, Python, .NET, servic
 - Remap individual keys, including letters, function keys, modifiers, arrows, and the numeric keypad.
 - Set source and destination by clicking their key buttons and pressing the actual keys, with explicit top-row/numpad labels and no key-selection menus.
 - The initial Default profile contains **Numpad 7 → Q**, **Numpad 8 → W**, and **Numpad 5 → R**. Top-row number keys are unchanged.
+- Each profile created with **New** starts with **Q → Numpad 7**, **W → Numpad 8**, and **R → Numpad 5**. Saved profiles retain their mappings.
 - Switch the interface instantly between **English**, **简体中文**, **日本語**, and **한국어**. The language is saved automatically; profile names stay as entered.
 - **Game-compatible input (scan codes)** is on by default, with an option to return to virtual-key output for typing applications.
 - Save up to 100 named profiles and switch between them in the profile menu.
@@ -23,7 +24,7 @@ Download **MagicKey-windows-x64-portable.zip** from [GitHub Releases](https://gi
 
 A release must first be published by the workflow below before the download links or in-app checks can return an executable. This source tree alone is not a published GitHub release.
 
-The app displays **MagicKey v1.2.0** in its heading. Windows file properties also contain the product name and version, generated from the single version in `CMakeLists.txt`.
+The app displays **MagicKey v1.2.1** in its heading. Windows file properties also contain the product name and version, generated from the single version in `CMakeLists.txt`.
 
 ## Build and publish (maintainers)
 
@@ -36,8 +37,8 @@ To publish a stable release:
 
    ```sh
    git push origin main
-   git tag v1.2.0
-   git push origin v1.2.0
+   git tag v1.2.1
+   git push origin v1.2.1
    ```
 
 3. Open **Actions → Build and release MagicKey**. After compilation, tests, and packaging succeed, the tag run creates a draft release with all four download assets, then publishes it as the latest stable release. A tag that differs from the compiled version fails before publication. Branch and pull-request runs never publish releases.
@@ -69,7 +70,7 @@ For manual recovery, close MagicKey, rename `MagicKey.exe.backup` to `MagicKey.e
 
 1. Open `MagicKey.exe`. The app starts paused so you can review the selected profile.
 2. Click the button under **From key**, then press and release the source key. Click the button under **To key**, then press and release the destination. Click **Add / update** to save the mapping. To block the source, click **Disabled** instead of capturing a destination. Selecting an existing row fills both buttons for editing. To remove a mapping, select its row and click **Remove** above the list.
-3. To create an empty profile, type a unique name in **Profile name** and click **New**. To rename the selected profile, edit its name and click **Rename**. Switching profiles applies the saved mappings immediately if remapping is enabled.
+3. To create a profile, type a unique name in **Profile name** and click **New**. It starts with **Q → Numpad 7**, **W → Numpad 8**, and **R → Numpad 5**. You can edit or remove these mappings. To rename the selected profile, edit its name and click **Rename**. Switching profiles applies the saved mappings immediately if remapping is enabled.
 4. Check **Disable both Windows keys** if desired.
 5. Click **Enable remapping**, then switch to the application where you want to use it. Remapping deliberately bypasses the MagicKey editor so its controls stay usable.
 6. Press **Ctrl + Alt + F12** to pause from another application, or close MagicKey to stop.
@@ -89,7 +90,7 @@ Number labels distinguish **Top row 7** from **Numpad 7**, and likewise for ever
 3. Replace your previous `MagicKey.exe` with `build-windows\Release\MagicKey.exe`, leaving your profile file beside it. If you run the executable directly from the build folder, copy your profile file there too.
 4. Choose your language in the upper-right menu and leave **Game-compatible input (scan codes)** checked when testing Warcraft III.
 
-The new version reads version-1 and version-2 profile files. An untouched legacy **Default** profile containing exactly A → Q and W → Numpad 7 (version 1), or top-row 7 → Q and 8 → W, is updated to **Numpad 7 → Q**, **Numpad 8 → W**, and **Numpad 5 → R**. Other profiles, including a customized Default profile, are preserved. To change an existing custom profile, remove any unwanted old mappings and add the three new mappings in the editor. Newly created profiles remain empty. These updates do not change the profile file format.
+The new version reads version-1 and version-2 profile files. An untouched legacy **Default** profile containing exactly A → Q and W → Numpad 7 (version 1), or top-row 7 → Q and 8 → W, is updated to **Numpad 7 → Q**, **Numpad 8 → W**, and **Numpad 5 → R**. Other profiles, including a customized Default profile, are preserved. Each profile created with **New** starts with **Q → Numpad 7**, **W → Numpad 8**, and **R → Numpad 5**. Existing empty profiles stay empty; the defaults are only applied on creation. These updates do not change the profile file format.
 
 The next settings change saves the version-2 format with language and output-mode preferences; older executables cannot read that format. Keep your backup if you need to downgrade.
 

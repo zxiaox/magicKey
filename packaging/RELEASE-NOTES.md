@@ -1,5 +1,7 @@
 Portable MagicKey for Windows 10/11 x64. End users do not need Visual Studio or an installer.
 
+New in this version: each profile created with **New** starts with **Q → Numpad 7**, **W → Numpad 8**, and **R → Numpad 5**. Existing profiles are preserved, and each new profile can be edited independently.
+
 Download **MagicKey-windows-x64-portable.zip**, extract it into a writable folder, and run **MagicKey.exe**. The executable is also available separately for existing installations and the in-app updater. The source-code archives are intended for developers.
 
 - Defaults: Numpad 7 → Q, Numpad 8 → W, Numpad 5 → R; top-row numbers remain unchanged.

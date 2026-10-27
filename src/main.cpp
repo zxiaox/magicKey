@@ -412,7 +412,7 @@ void command(int id, int notification) {
                 error(L"That profile name already exists. Enter a different name first."); return;
             }
         if (id == RenameProfile) p.name = name;
-        else { candidate.profiles.push_back({name, false, {}}); candidate.selected = candidate.profiles.size() - 1; }
+        else { candidate.profiles.push_back(newProfile(name)); candidate.selected = candidate.profiles.size() - 1; }
     } else if (id == DeleteProfile) {
         if (candidate.profiles.size() == 1) return;
         if (MessageBoxW(window, tr(L"Delete this profile and its mappings?"), tr(L"Delete profile"), MB_YESNO | MB_ICONQUESTION) != IDYES) return;

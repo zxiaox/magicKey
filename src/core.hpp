@@ -6,6 +6,7 @@
 #include <map>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace mywarkey {
@@ -16,6 +17,9 @@ struct Profile {
 };
 inline std::map<int, int> defaultMappings() {
     return {{0x67, 'Q'}, {0x68, 'W'}, {0x65, 'R'}}; // Numpad 7, 8, 5.
+}
+inline Profile newProfile(std::string name) {
+    return {std::move(name), false, {{'Q', 0x67}, {'W', 0x68}, {'R', 0x65}}};
 }
 struct Settings {
     std::size_t selected = 0;

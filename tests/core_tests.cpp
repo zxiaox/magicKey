@@ -23,6 +23,22 @@ int main() {
     require(loaded.profiles[1].name == settings.profiles[1].name);
     require(loaded.profiles[1].blockWindows && loaded.profiles[0].mappings.at(0x68) == 'W');
     require(loaded.language == 3 && !loaded.scanCodes);
+    // New profiles get independent forward mappings, without changing the
+    // existing Default profile or copying edits from the selected profile.
+    const std::map<int, int> newDefaults{{'Q', 0x67}, {'W', 0x68}, {'R', 0x65}};
+    Settings created;
+    const auto existingMappings = created.profiles[0].mappings;
+    created.profiles.push_back(newProfile("First game"));
+    require(created.profiles.back().mappings == newDefaults && !created.profiles.back().blockWindows);
+    created.profiles.back().mappings['Q'] = 'T';
+    created.profiles.push_back(newProfile("Second game"));
+    require(created.profiles.back().name == "Second game" && created.profiles.back().mappings == newDefaults);
+    require(created.profiles[0].mappings == existingMappings && created.profiles[1].mappings.at('Q') == 'T');
+    created.profiles.push_back({"Existing empty profile", false, {}});
+    std::stringstream createdFile;
+    writeSettings(createdFile, created);
+    const auto restored = readSettings(createdFile);
+    require(restored.profiles[2].mappings == newDefaults && restored.profiles[3].mappings.empty());
     std::istringstream legacy("MYWARKEY 1 0 2 \"Default\" 0 2 65 81 87 103 \"Custom\" 1 1 65 90");
     auto upgraded = readSettings(legacy);
     require(upgraded.profiles[0].mappings == Settings{}.profiles[0].mappings);
@@ -51,6 +67,17 @@ int main() {
     Profile p{"Test", true, {{'A', 'Q'}, {'W', 0x67}, {'B', 'Q'}, {'Z', 0}}};
     std::vector<std::pair<int, bool>> events;
     auto send = [&](int key, bool down) { events.emplace_back(key, down); };
+    Remapper newProfileEngine;
+    const auto fresh = newProfile("Game");
+    for (auto [source, target] : newDefaults) {
+        require(newProfileEngine.event(source, true, fresh, true, send));
+        require(events.back() == std::make_pair(target, true));
+        require(newProfileEngine.event(source, false, fresh, true, send));
+        require(events.back() == std::make_pair(target, false));
+    }
+    for (int unchanged : std::array<int, 6>{'7', '8', '5', 0x67, 0x68, 0x65})
+        require(!newProfileEngine.event(unchanged, true, fresh, true, send));
+    events.clear();
     Remapper defaultsEngine;
     const auto& defaults = settings.profiles[0];
     for (int digit : {'7', '8', '5'})

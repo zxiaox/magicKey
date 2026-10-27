@@ -5,6 +5,8 @@ Run MagicKey.exe from a writable folder. No installation, Visual Studio, CMake,
 Python, .NET, or additional C++ runtime installation is needed.
 
 Default mappings: Numpad 7 -> Q, Numpad 8 -> W, Numpad 5 -> R.
+Profiles created with New start with Q -> Numpad 7, W -> Numpad 8,
+and R -> Numpad 5. Existing profiles keep their saved mappings.
 Top-row numbers are unchanged. The app starts paused.
 Click a From/To key button, press and release a key, then click Add / update.
 Enable remapping and switch to your game. Ctrl + Alt + F12 pauses immediately.
