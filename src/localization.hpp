@@ -4,6 +4,20 @@
 namespace mywarkey {
 struct Translation { const wchar_t *en, *zh, *ja, *ko; };
 inline constexpr Translation translations[] = {
+    {L"Theme", L"主题", L"テーマ", L"테마"},
+    {L"Ivory", L"象牙白", L"アイボリー", L"아이보리"},
+    {L"Midnight", L"午夜蓝", L"ミッドナイト", L"미드나이트"},
+    {L"Arcane", L"奥术紫", L"アーケイン", L"비전"},
+    {L"Warcraft III", L"魔兽争霸 III", L"Warcraft III", L"워크래프트 III"},
+    {L"Portable keyboard control", L"便携式键盘控制", L"ポータブル キー設定", L"포터블 키보드 제어"},
+    {L"Emergency pause", L"紧急暂停", L"緊急停止", L"긴급 정지"},
+    {L"Profiles save automatically.", L"配置方案自动保存。", L"設定は自動保存されます。", L"프로필은 자동 저장됩니다."},
+    {L"Remapping active", L"按键映射已启用", L"キー割り当てが有効", L"키 매핑 활성"},
+    {L"Remapping paused", L"按键映射已暂停", L"キー割り当てを一時停止中", L"키 매핑 일시 정지"},
+    {L"No mappings yet. Capture two keys to add one.", L"暂无映射。录入两个按键即可添加。", L"割り当てはありません。キーを入力して追加してください。", L"매핑이 없습니다. 두 키를 입력해 추가하세요."},
+    {L"Could not save the theme. Check that the app folder is writable.", L"无法保存主题。请检查程序文件夹是否可写入。", L"テーマを保存できません。アプリのフォルダーに書き込めるか確認してください。", L"테마를 저장할 수 없습니다. 앱 폴더 쓰기 권한을 확인하세요."},
+    {L"The saved theme could not be loaded. Ivory is being used. Your profiles are unchanged.", L"无法读取已保存的主题，已使用象牙白主题。您的配置方案未更改。", L"保存されたテーマを読み込めないため、アイボリーを使用します。プロファイルは変更されていません。", L"저장된 테마를 불러올 수 없어 아이보리를 사용합니다. 프로필은 변경되지 않았습니다."},
+    {L"New profiles include:\nQ  \x2192  Numpad 7\nW  \x2192  Numpad 8\nR  \x2192  Numpad 5", L"新方案默认包含：\nQ  \x2192  小键盘 7\nW  \x2192  小键盘 8\nR  \x2192  小键盘 5", L"新しいプロファイルの初期設定：\nQ  \x2192  テンキー 7\nW  \x2192  テンキー 8\nR  \x2192  テンキー 5", L"새 프로필 기본 매핑:\nQ  \x2192  숫자 패드 7\nW  \x2192  숫자 패드 8\nR  \x2192  숫자 패드 5"},
     {L"Check for updates", L"检查更新", L"更新を確認", L"업데이트 확인"},
     {L"Checking for updates...", L"正在检查更新…", L"更新を確認中…", L"업데이트 확인 중…"},
     {L"Downloading update...", L"正在下载更新…", L"更新をダウンロード中…", L"업데이트 다운로드 중…"},

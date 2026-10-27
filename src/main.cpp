@@ -8,21 +8,25 @@
 #include "localization.hpp"
 #include "key_capture.hpp"
 #include "updater.hpp"
+#include "theme_ui.hpp"
 
 using namespace mywarkey;
 constexpr UINT PauseMessage = WM_APP + 1, InputError = WM_APP + 2, CapturedKey = WM_APP + 3, UpdateFinished = WM_APP + 4;
 enum ControlId { ProfileBox = 101, NewProfile, RenameProfile, DeleteProfile, ProfileName,
-    MappingList, SourceBox, TargetBox, AddMapping, RemoveMapping, BlockWindows, Toggle, LanguageBox, ScanCodes, DisableTarget, CheckUpdates };
+    MappingList, SourceBox, TargetBox, AddMapping, RemoveMapping, BlockWindows, Toggle, LanguageBox, ScanCodes, DisableTarget, CheckUpdates, ThemeBox, SectionProfile, SectionMappings };
 constexpr wchar_t ClassName[] = L"mywarkey.Portable.Window";
 HWND window, profileBox, nameEdit, mappingList, sourceBox, targetBox, blockBox, toggleButton, statusLabel, languageBox, scanBox;
 std::vector<std::pair<HWND, std::wstring>> localizedControls;
-HFONT font, titleFont;
-HBRUSH background;
+HFONT font;
+magickey::ThemeUI themeUI;
+HWND themeBox;
+HIMAGELIST rowImages;
 HANDLE hookThread, hookReady;
 DWORD hookThreadId;
 bool hookInstalled = false;
 Settings settings;
 std::filesystem::path settingsPath;
+std::filesystem::path themePath;
 bool enabled = false;
 bool inputFailed = false;
 std::mutex engineMutex;
@@ -212,12 +216,32 @@ bool commit(Settings candidate) {
     } catch (const std::exception& e) { error(wide(e.what())); return false; }
 }
 HWND control(const wchar_t* type, const wchar_t* label, DWORD style, int id, int x, int y, int w, int h) {
+    if (std::wstring_view(type) == WC_COMBOBOXW) style |= CBS_OWNERDRAWFIXED | CBS_HASSTRINGS;
     HWND child = CreateWindowExW(0, type, tr(label), WS_CHILD | WS_VISIBLE | style,
         x, y, w, h, window, reinterpret_cast<HMENU>(INT_PTR(id)), GetModuleHandleW(nullptr), nullptr);
-    SendMessageW(child, WM_SETFONT, WPARAM(font), TRUE);
+    SendMessageW(child, WM_SETFONT, WPARAM(std::wstring_view(type) == L"STATIC" ? themeUI.small() : font), TRUE);
     if (*label && (std::wstring_view(type) == L"STATIC" || std::wstring_view(type) == L"BUTTON"))
         localizedControls.emplace_back(child, label);
     return child;
+}
+void refreshThemes() {
+    SendMessageW(themeBox, CB_RESETCONTENT, 0, 0);
+    for (const auto& theme : magickey::Themes)
+        SendMessageW(themeBox, CB_ADDSTRING, 0, LPARAM(tr(theme.name)));
+    SendMessageW(themeBox, CB_SETCURSEL, int(themeUI.theme()), 0);
+}
+void changeTheme(int choice) {
+    if (!magickey::validTheme(choice)) return;
+    try {
+        auto temporary = themePath; temporary += L".tmp";
+        std::ofstream output(temporary, std::ios::binary | std::ios::trunc);
+        magickey::writeTheme(output, magickey::ThemeId(choice));
+        output.close();
+        if (!output || !MoveFileExW(temporary.c_str(), themePath.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+            throw std::runtime_error("Theme save failed");
+        themeUI.apply(window, mappingList, magickey::ThemeId(choice));
+    } catch (...) { error(L"Could not save the theme. Check that the app folder is writable."); }
+    refreshThemes();
 }
 void updateCaptureButtons() {
     CaptureSlot slot;
@@ -283,6 +307,7 @@ void refresh() {
     for (const auto& entry : localizedControls) SetWindowTextW(entry.first, tr(entry.second.c_str()));
     SendMessageW(languageBox, CB_SETCURSEL, settings.language, 0);
     SendMessageW(scanBox, BM_SETCHECK, settings.scanCodes ? BST_CHECKED : BST_UNCHECKED, 0);
+    refreshThemes();
     updateCaptureButtons();
     LVCOLUMNW column{}; column.mask = LVCF_TEXT;
     column.pszText = const_cast<wchar_t*>(tr(L"When you press"));
@@ -309,7 +334,7 @@ void refresh() {
         ListView_SetItemText(mappingList, row, 1, target.data());
     }
     SetWindowTextW(toggleButton, tr(enabled ? L"Pause remapping" : L"Enable remapping"));
-    SetWindowTextW(statusLabel, tr(enabled ? L"ACTIVE  /  Profile applies in other applications" : L"PAUSED  /  Your keyboard works normally"));
+    SetWindowTextW(statusLabel, tr(enabled ? L"Remapping active" : L"Remapping paused"));
     EnableWindow(GetDlgItem(window, DeleteProfile), settings.profiles.size() > 1);
     InvalidateRect(window, nullptr, FALSE);
     updateUpdateButton();
@@ -325,48 +350,50 @@ std::string enteredName() {
     return utf8(name);
 }
 void makeInterface() {
-    auto heading = L"MagicKey v" + wide(MAGICKEY_VERSION);
-    auto title = control(L"STATIC", heading.c_str(), 0, 0, 30, 22, 410, 44);
-    SendMessageW(title, WM_SETFONT, WPARAM(titleFont), TRUE);
-    control(L"STATIC", L"Language", 0, 0, 466, 10, 210, 20);
-    languageBox = control(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_TABSTOP, LanguageBox, 466, 34, 210, 200);
+    control(L"STATIC", L"Language", 0, 0, 592, 13, 130, 20);
+    languageBox = control(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_TABSTOP, LanguageBox, 592, 38, 130, 220);
     for (auto name : {L"English", L"简体中文", L"日本語", L"한국어"})
         SendMessageW(languageBox, CB_ADDSTRING, 0, LPARAM(name));
-    control(L"STATIC", L"Your keyboard. Your rules.  /  Portable for Windows", 0, 0, 32, 67, 650, 24);
-    control(L"STATIC", L"PROFILE", 0, 0, 32, 105, 350, 22);
-    profileBox = control(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, ProfileBox, 32, 130, 350, 300);
-    control(L"BUTTON", L"Check for updates", WS_TABSTOP, CheckUpdates, 398, 129, 278, 32);
-    control(L"STATIC", L"Profile name", 0, 0, 32, 172, 350, 22);
-    nameEdit = control(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP, ProfileName, 32, 195, 350, 29);
+    control(L"STATIC", L"Theme", 0, 0, 738, 13, 138, 20);
+    themeBox = control(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_TABSTOP, ThemeBox, 738, 38, 138, 220);
+    control(L"STATIC", L"PROFILE", 0, SectionProfile, 44, 138, 206, 20);
+    profileBox = control(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, ProfileBox, 44, 166, 206, 300);
+    control(L"STATIC", L"Profile name", 0, 0, 44, 211, 206, 20);
+    nameEdit = control(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP, ProfileName, 44, 236, 206, 32);
     SendMessageW(nameEdit, EM_SETLIMITTEXT, 80, 0);
-    control(L"BUTTON", L"New", WS_TABSTOP, NewProfile, 398, 194, 83, 31);
-    control(L"BUTTON", L"Rename", WS_TABSTOP, RenameProfile, 489, 194, 94, 31);
-    control(L"BUTTON", L"Delete", WS_TABSTOP, DeleteProfile, 591, 194, 85, 31);
-    control(L"STATIC", L"KEY MAPPINGS", 0, 0, 32, 244, 200, 22);
-    control(L"BUTTON", L"Remove", WS_TABSTOP, RemoveMapping, 591, 239, 85, 28);
-    mappingList = control(WC_LISTVIEWW, L"", LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | WS_BORDER | WS_TABSTOP,
-        MappingList, 32, 274, 644, 145);
+    control(L"BUTTON", L"New", WS_TABSTOP, NewProfile, 44, 280, 98, 32);
+    control(L"BUTTON", L"Rename", WS_TABSTOP, RenameProfile, 152, 280, 98, 32);
+    control(L"BUTTON", L"Delete", WS_TABSTOP, DeleteProfile, 44, 322, 206, 32);
+    control(L"STATIC", L"New profiles include:\nQ  \x2192  Numpad 7\nW  \x2192  Numpad 8\nR  \x2192  Numpad 5", 0, 0, 44, 393, 206, 86);
+    control(L"STATIC", L"KEY MAPPINGS", 0, SectionMappings, 310, 138, 300, 20);
+    control(L"BUTTON", L"Remove", WS_TABSTOP, RemoveMapping, 766, 133, 88, 30);
+    mappingList = control(WC_LISTVIEWW, L"", LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_SHAREIMAGELISTS | WS_TABSTOP,
+        MappingList, 310, 176, 544, 176);
     ListView_SetExtendedListViewStyle(mappingList, LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER);
+    rowImages = ImageList_Create(1, 36, ILC_COLOR32, 1, 0);
+    ListView_SetImageList(mappingList, rowImages, LVSIL_SMALL);
     LVCOLUMNW column{}; column.mask = LVCF_TEXT | LVCF_WIDTH;
-    column.pszText = const_cast<wchar_t*>(L"When you press"); column.cx = 306;
+    column.pszText = const_cast<wchar_t*>(L"When you press"); column.cx = 252;
     ListView_InsertColumn(mappingList, 0, &column);
-    column.pszText = const_cast<wchar_t*>(L"Send instead"); column.cx = 310;
+    column.pszText = const_cast<wchar_t*>(L"Send instead"); column.cx = 292;
     ListView_InsertColumn(mappingList, 1, &column);
-    control(L"STATIC", L"From key", 0, 0, 32, 436, 182, 22);
-    control(L"STATIC", L"To key", 0, 0, 228, 436, 182, 22);
-    sourceBox = control(L"BUTTON", L"", WS_TABSTOP, SourceBox, 32, 461, 182, 32);
-    targetBox = control(L"BUTTON", L"", WS_TABSTOP, TargetBox, 228, 461, 182, 32);
-    control(L"BUTTON", L"Disabled", WS_TABSTOP, DisableTarget, 424, 461, 85, 32);
-    control(L"BUTTON", L"Add / update", WS_TABSTOP, AddMapping, 517, 461, 159, 32);
-    control(L"STATIC", L"Click a key button, then press and release a key. Click again to cancel.", 0, 0, 32, 496, 644, 19);
+    control(L"STATIC", L"From key", 0, 0, 310, 365, 190, 20);
+    control(L"STATIC", L"To key", 0, 0, 522, 365, 190, 20);
+    sourceBox = control(L"BUTTON", L"", WS_TABSTOP, SourceBox, 310, 390, 190, 40);
+    targetBox = control(L"BUTTON", L"", WS_TABSTOP, TargetBox, 522, 390, 190, 40);
+    control(L"BUTTON", L"Disabled", WS_TABSTOP, DisableTarget, 730, 390, 124, 40);
+    control(L"BUTTON", L"Add / update", WS_TABSTOP, AddMapping, 730, 441, 124, 30);
+    control(L"STATIC", L"Click a key button, then press and release a key. Click again to cancel.", 0, 0, 310, 441, 398, 34);
     blockBox = control(L"BUTTON", L"Disable both Windows keys in this profile", BS_AUTOCHECKBOX | WS_TABSTOP,
-        BlockWindows, 32, 515, 644, 27);
+        BlockWindows, 310, 508, 544, 30);
     scanBox = control(L"BUTTON", L"Game-compatible input (scan codes)", BS_AUTOCHECKBOX | WS_TABSTOP,
-        ScanCodes, 32, 545, 644, 27);
-    statusLabel = control(L"STATIC", L"", 0, 0, 32, 581, 644, 26);
-    toggleButton = control(L"BUTTON", L"", BS_DEFPUSHBUTTON | WS_TABSTOP, Toggle, 32, 618, 226, 42);
-    control(L"STATIC", L"Emergency pause: Ctrl + Alt + F12\nProfiles save automatically beside the app.", 0, 0, 282, 617, 394, 48);
-    control(L"STATIC", L"Keep Num Lock on for numeric output. Close the app to stop remapping.", 0, 0, 32, 680, 650, 24);
+        ScanCodes, 310, 546, 544, 30);
+    statusLabel = control(L"STATIC", L"", 0, 0, 58, 626, 394, 22);
+    SendMessageW(statusLabel, WM_SETFONT, WPARAM(font), TRUE);
+    control(L"BUTTON", L"Check for updates", WS_TABSTOP, CheckUpdates, 474, 620, 184, 32);
+    toggleButton = control(L"BUTTON", L"", BS_DEFPUSHBUTTON | WS_TABSTOP, Toggle, 676, 620, 178, 32);
+    for (HWND box : {profileBox, languageBox, themeBox}) SendMessageW(box, CB_SETITEMHEIGHT, WPARAM(-1), 28);
+    themeUI.apply(window, mappingList, themeUI.theme());
     refresh();
 }
 void command(int id, int notification) {
@@ -384,6 +411,7 @@ void command(int id, int notification) {
     }
     if (id == ProfileName || (notification != BN_CLICKED && notification != CBN_SELCHANGE)) return;
     cancelCapture();
+    if (id == ThemeBox && notification == CBN_SELCHANGE) { changeTheme(int(SendMessageW(themeBox, CB_GETCURSEL, 0, 0))); return; }
     if (id == CheckUpdates) { beginUpdateCheck(); return; }
     if (id == DisableTarget) { targetChoice = 0; updateCaptureButtons(); return; }
     auto candidate = settings;
@@ -438,10 +466,60 @@ void command(int id, int notification) {
 LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
     switch (message) {
         case WM_CREATE: window = hwnd; makeInterface(); return 0;
+        case WM_ERASEBKGND: return 1;
+        case WM_PAINT: {
+            PAINTSTRUCT paint;
+            HDC dc = BeginPaint(hwnd, &paint);
+            RECT bounds; GetClientRect(hwnd, &bounds);
+            HDC memory = CreateCompatibleDC(dc);
+            HBITMAP bitmap = CreateCompatibleBitmap(dc, bounds.right, bounds.bottom);
+            auto old = SelectObject(memory, bitmap);
+            themeUI.paint(memory, bounds, enabled, settings.language);
+            BitBlt(dc, 0, 0, bounds.right, bounds.bottom, memory, 0, 0, SRCCOPY);
+            SelectObject(memory, old); DeleteObject(bitmap); DeleteDC(memory);
+            EndPaint(hwnd, &paint); return 0;
+        }
+        case WM_PRINTCLIENT: {
+            RECT bounds; GetClientRect(hwnd, &bounds);
+            themeUI.paint(reinterpret_cast<HDC>(w), bounds, enabled, settings.language);
+            return 0;
+        }
+        case WM_MEASUREITEM: {
+            auto item = reinterpret_cast<MEASUREITEMSTRUCT*>(l);
+            if (item->CtlType == ODT_COMBOBOX) { item->itemHeight = 28; return TRUE; }
+            break;
+        }
+        case WM_DRAWITEM: {
+            auto item = reinterpret_cast<DRAWITEMSTRUCT*>(l);
+            if (item->CtlType == ODT_COMBOBOX) { themeUI.combo(item); return TRUE; }
+            break;
+        }
         case WM_COMMAND: command(LOWORD(w), HIWORD(w)); return 0;
         case UpdateFinished: finishUpdate(); return 0;
         case WM_NOTIFY: {
             auto header = reinterpret_cast<NMHDR*>(l);
+            if (header->code == NM_CUSTOMDRAW) {
+                if (header->hwndFrom == mappingList) return themeUI.list(reinterpret_cast<NMLVCUSTOMDRAW*>(l));
+                if (header->hwndFrom == ListView_GetHeader(mappingList)) return themeUI.header(reinterpret_cast<NMCUSTOMDRAW*>(l));
+                auto role = magickey::ButtonRole::Secondary;
+                if (header->idFrom == Toggle || header->idFrom == AddMapping) role = magickey::ButtonRole::Primary;
+                if (header->idFrom == DeleteProfile) role = magickey::ButtonRole::Danger;
+                if (header->idFrom == SourceBox || header->idFrom == TargetBox) role = magickey::ButtonRole::Key;
+                if (header->idFrom == BlockWindows || header->idFrom == ScanCodes) role = magickey::ButtonRole::Checkbox;
+                wchar_t kind[32]{}; GetClassNameW(header->hwndFrom, kind, 32);
+                if (_wcsicmp(kind, L"Button") != 0) return CDRF_DODEFAULT;
+                CaptureSlot slot;
+                { std::lock_guard<std::mutex> lock(engineMutex); slot = capture.activeSlot(); }
+                const bool listening = (header->idFrom == SourceBox && slot == CaptureSlot::Source) ||
+                    (header->idFrom == TargetBox && slot == CaptureSlot::Target);
+                return themeUI.button(reinterpret_cast<NMCUSTOMDRAW*>(l), role, listening);
+            }
+            if (header->idFrom == MappingList && header->code == LVN_GETEMPTYMARKUP) {
+                auto empty = reinterpret_cast<NMLVEMPTYMARKUP*>(l);
+                empty->dwFlags = EMF_CENTERED;
+                wcsncpy_s(empty->szMarkup, std::size(empty->szMarkup), tr(L"No mappings yet. Capture two keys to add one."), _TRUNCATE);
+                return TRUE;
+            }
             if (header->idFrom == MappingList && header->code == LVN_ITEMCHANGED) {
                 auto change = reinterpret_cast<NMLISTVIEW*>(l);
                 if (change->uNewState & LVIS_SELECTED) {
@@ -475,10 +553,21 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
             enabled = false; syncEngine(); refresh();
             error(L"Windows could not send a remapped key. Remapping is paused. If the target app runs as administrator, run MagicKey at the same privilege level.");
             return 0;
-        case WM_CTLCOLORSTATIC:
-            SetTextColor(reinterpret_cast<HDC>(w), RGB(44, 52, 67));
-            SetBkColor(reinterpret_cast<HDC>(w), RGB(246, 248, 252));
-            return LRESULT(background);
+        case WM_CTLCOLORSTATIC: {
+            const auto& p = themeUI.colors();
+            HWND child = reinterpret_cast<HWND>(l);
+            auto ink = child == statusLabel ? (enabled ? p.success : p.text) : p.muted;
+            int id = GetDlgCtrlID(child);
+            if (id == SectionProfile || id == SectionMappings) ink = p.accent;
+            SetTextColor(reinterpret_cast<HDC>(w), magickey::color(ink));
+            SetBkMode(reinterpret_cast<HDC>(w), TRANSPARENT);
+            return LRESULT(themeUI.staticBackground(child, hwnd));
+        }
+        case WM_CTLCOLOREDIT:
+        case WM_CTLCOLORLISTBOX:
+            SetTextColor(reinterpret_cast<HDC>(w), magickey::color(themeUI.colors().text));
+            SetBkColor(reinterpret_cast<HDC>(w), magickey::color(themeUI.colors().control));
+            return LRESULT(themeUI.input());
         case WM_CLOSE:
             if (updateClient.busy()) {
                 cancelCapture(); enabled = false; syncEngine();
@@ -526,18 +615,22 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     }
     liveProfile = settings.profiles[settings.selected];
     liveScanCodes = settings.scanCodes;
-    font = CreateFontW(-16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
-    titleFont = CreateFontW(-34, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
-    background = CreateSolidBrush(RGB(246, 248, 252));
+    bool invalidTheme = false;
+    themePath = std::filesystem::path(executable).parent_path() / L"MagicKey.theme";
+    auto theme = magickey::ThemeId::Ivory;
+    if (std::filesystem::exists(themePath)) {
+        try { std::ifstream input(themePath, std::ios::binary); theme = magickey::readTheme(input); }
+        catch (...) { invalidTheme = true; }
+    }
+    themeUI.initialize(theme);
+    font = themeUI.body();
     WNDCLASSW wc{};
     wc.lpfnWndProc = windowProc; wc.hInstance = instance; wc.lpszClassName = ClassName;
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW); wc.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
-    wc.hbrBackground = background;
+    wc.hbrBackground = nullptr;
     RegisterClassW(&wc);
-    RECT bounds{0, 0, 710, 710};
-    DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
+    RECT bounds{0, 0, 900, 680};
+    DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN;
     AdjustWindowRect(&bounds, style, FALSE);
     window = CreateWindowExW(WS_EX_CONTROLPARENT, ClassName, L"MagicKey", style, CW_USEDEFAULT, CW_USEDEFAULT,
         bounds.right - bounds.left, bounds.bottom - bounds.top, nullptr, nullptr, instance, nullptr);
@@ -549,6 +642,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
         DestroyWindow(window);
     } else {
         ShowWindow(window, show); UpdateWindow(window);
+        if (invalidTheme) error(L"The saved theme could not be loaded. Ivory is being used. Your profiles are unchanged.");
     }
     MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
@@ -556,7 +650,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     }
     if (hookThread) { WaitForSingleObject(hookThread, 5000); CloseHandle(hookThread); }
     if (hookReady) CloseHandle(hookReady);
-    DeleteObject(font); DeleteObject(titleFont); DeleteObject(background);
+    if (rowImages) ImageList_Destroy(rowImages);
     CloseHandle(single);
     return 0;
 }

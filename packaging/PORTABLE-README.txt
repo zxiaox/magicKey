@@ -11,6 +11,8 @@ Top-row numbers are unchanged. The app starts paused.
 Click a From/To key button, press and release a key, then click Add / update.
 Enable remapping and switch to your game. Ctrl + Alt + F12 pauses immediately.
 Close the app to stop remapping. The interface is available in four languages.
+Choose Theme at the upper right: Ivory, Midnight, Arcane, or Warcraft III.
+Your theme is saved in MagicKey.theme separately from saved profiles.
 
 Check for updates contacts this repository's public GitHub Releases. You can
 approve a verified download and restart. The previous executable is kept as

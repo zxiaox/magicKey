@@ -1,6 +1,6 @@
 Portable MagicKey for Windows 10/11 x64. End users do not need Visual Studio or an installer.
 
-New in this version: each profile created with **New** starts with **Q → Numpad 7**, **W → Numpad 8**, and **R → Numpad 5**. Existing profiles are preserved, and each new profile can be edited independently.
+New in this version: a refreshed interface with a profile sidebar, keycap mapping table, clear status bar, and four built-in themes: **Ivory**, **Midnight**, **Arcane**, and **Warcraft III**. The Warcraft theme includes stone colors, bronze borders, and original shield-and-sword decoration. Choose **Theme** at the upper right; the choice survives restarting and updating. Saved profiles and their file format are unchanged.
 
 Download **MagicKey-windows-x64-portable.zip**, extract it into a writable folder, and run **MagicKey.exe**. The executable is also available separately for existing installations and the in-app updater. The source-code archives are intended for developers.
 

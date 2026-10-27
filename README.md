@@ -18,17 +18,25 @@ A portable, native Windows keyboard remapper. No installer, Python, .NET, servic
 - Release held output keys on pause, profile changes, edits, and normal exit.
 - Run minimized while remapping remains active. Closing the window stops remapping.
 
+## Themes and refreshed interface
+
+Choose **Theme** at the upper right to switch instantly between **Ivory**, **Midnight**, **Arcane**, and **Warcraft III**. The Warcraft theme uses stone colors, bronze borders, gold highlights, and original shield-and-sword decoration drawn with Windows graphics APIs. No game artwork, external assets, or additional downloads are needed.
+
+Profiles sit in a sidebar; mappings appear as keycaps with direction arrows. Key capture, options, and the status/update bar have separate areas. Buttons, table rows, headers, checkboxes, input fields, and dropdown contents follow the selected palette. Keyboard focus indicators remain visible, and theme text/background pairs are checked for readable contrast. Windows title-bar colors follow the theme where supported by the OS; native scrollbars and standard system message boxes can retain the Windows appearance.
+
+The theme is saved separately in `MagicKey.theme` beside the executable, using a temporary file and replacement. Theme changes do not rewrite `mywarkey.profiles` or change the profile format. Older profile files, saved languages, and mappings are preserved. Invalid theme preferences fall back to Ivory with a message and leave profiles untouched. In-app updates preserve both files.
+
 ## Download and run (end users)
 
 Download **MagicKey-windows-x64-portable.zip** from [GitHub Releases](https://github.com/zxiaox/magicKey/releases), extract it into a writable folder, and double-click **MagicKey.exe**. No Visual Studio, compiler, CMake, installer, or extra C++ runtime installation is needed. The executable statically links its C++ runtime. The standalone **MagicKey.exe** asset is also available for existing installations. Source-code ZIPs are for developers.
 
 A release must first be published by the workflow below before the download links or in-app checks can return an executable. This source tree alone is not a published GitHub release.
 
-The app displays **MagicKey v1.2.1** in its heading. Windows file properties also contain the product name and version, generated from the single version in `CMakeLists.txt`.
+The app displays **MagicKey v1.3.0** in its heading. Windows file properties also contain the product name and version, generated from the single version in `CMakeLists.txt`.
 
 ## Build and publish (maintainers)
 
-GitHub Actions builds and tests Windows x64 executables on every push and pull request, and packages the executable, portable ZIP, and SHA-256 checksum files as the **MagicKey-windows-x64-portable** artifact. The workflow also runs a Windows integration test using the real updater helper to verify replacement, backup, restart, profile preservation, and Unicode paths. End users never run the build script.
+GitHub Actions builds and tests Windows x64 executables on every push and pull request, and packages the executable, portable ZIP, and SHA-256 checksum files as the **MagicKey-windows-x64-portable** artifact. The workflow also runs Windows integration tests using the real updater helper and application windows. It verifies replacement, backup, restart, profile preservation, Unicode paths, all four theme palettes, language combinations, and theme persistence after restarting. Actual window screenshots are saved in the MagicKey-theme-previews artifact for visual review. End users never run the build script.
 
 To publish a stable release:
 
@@ -37,8 +45,8 @@ To publish a stable release:
 
    ```sh
    git push origin main
-   git tag v1.2.1
-   git push origin v1.2.1
+   git tag v1.3.0
+   git push origin v1.3.0
    ```
 
 3. Open **Actions → Build and release MagicKey**. After compilation, tests, and packaging succeed, the tag run creates a draft release with all four download assets, then publishes it as the latest stable release. A tag that differs from the compiled version fails before publication. Branch and pull-request runs never publish releases.
@@ -135,3 +143,5 @@ Windows smoke test: capture top-row 7 and Numpad 7 separately with Num Lock both
 Implementation references: [LowLevelKeyboardProc](https://learn.microsoft.com/en-us/windows/win32/winmsg/lowlevelkeyboardproc), [SendInput](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput).
 
 Updater tests additionally cover strict numeric versions, malformed release metadata, draft/prerelease rejection, trusted repository URLs, exact asset selection, size limits, checksum parsing, x64 PE identification, and Windows command-line quoting. The Windows helper integration test runs in CI; game compatibility and translated interface layout still require a real Windows smoke test.
+
+Theme tests cover all four preference values, malformed appearance files, and text contrast. Windows UI tests switch each theme through its real selector, restart the app, verify the saved selection and rendered background, ensure profiles remain byte-identical, and capture screenshots for all four language/theme combinations.

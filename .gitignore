@@ -3,8 +3,11 @@
 /build-windows.log
 /build-cross/
 /dist/
+/theme-previews/
 *.exe
 *.exe.backup
 .MagicKey-update-*/
 *.profiles
 *.profiles.tmp
+*.theme
+*.theme.tmp
