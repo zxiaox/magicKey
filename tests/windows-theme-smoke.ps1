@@ -13,8 +13,10 @@ public static class ThemeWindow {
     [DllImport("user32.dll")] public static extern IntPtr GetDlgItem(IntPtr h, int id);
     [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr h, uint msg, IntPtr w, IntPtr l);
     [DllImport("user32.dll")] public static extern bool UpdateWindow(IntPtr h);
+    [DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr value);
 }
 '@
+$null = [ThemeWindow]::SetThreadDpiAwarenessContext([IntPtr](-4))
 $source = (Resolve-Path $Executable).Path
 New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
 $output = (Resolve-Path $OutputDirectory).Path
@@ -41,10 +43,13 @@ function Close-MagicKey($p) {
     if (!$p.WaitForExit(10000) -or $p.ExitCode -ne 0) { throw 'MagicKey did not close cleanly' }
 }
 try {
-    for ($theme = 0; $theme -lt 4; $theme++) {
+    $cases = @(@(0,0,'ivory'), @(1,0,'midnight'), @(2,0,'arcane'), @(3,0,'warcraft-iii'), @(3,1,'warcraft-iii-zh'), @(3,2,'warcraft-iii-ja'), @(3,3,'warcraft-iii-ko'))
+    foreach ($case in $cases) {
+        $theme = $case[0]
+        $language = $case[1]
+        $name = $case[2]
         $profile = Join-Path $root 'mywarkey.profiles'
-        # All four interface languages are exercised across the four themes.
-        [IO.File]::WriteAllText($profile, "MYWARKEY 2 0 1 $theme 1 `"Game`" 0 3 81 103 87 104 82 101`n")
+        [IO.File]::WriteAllText($profile, "MYWARKEY 2 0 1 $language 1 `"Game`" 0 3 81 103 87 104 82 101`n")
         [IO.File]::WriteAllText((Join-Path $root 'MagicKey.theme'), 'MAGICKEY_THEME 1 0')
         $profileHash = (Get-FileHash -LiteralPath $profile -Algorithm SHA256).Hash
         $process = Start-MagicKey
@@ -75,12 +80,12 @@ try {
             $null = [ThemeWindow]::ClientToScreen($hwnd, [ref]$origin)
             $pixel = $bitmap.GetPixel($origin.X - $rect.Left + 8, $origin.Y - $rect.Top + 110)
             $rgb = ($pixel.R -shl 16) -bor ($pixel.G -shl 8) -bor $pixel.B
-            if ($rgb -ne $backgrounds[$theme]) { throw "Theme background did not render: $($names[$theme])" }
-            $bitmap.Save((Join-Path $output ($names[$theme] + '.png')), [Drawing.Imaging.ImageFormat]::Png)
+            $bitmap.Save((Join-Path $output ($name + '.png')), [Drawing.Imaging.ImageFormat]::Png)
+            if ($rgb -ne $backgrounds[$theme]) { throw ('Theme background mismatch for {0}: actual {1:X6}, expected {2:X6}, origin {3},{4}, bitmap {5}x{6}' -f $name,$rgb,$backgrounds[$theme],($origin.X-$rect.Left),($origin.Y-$rect.Top),$bitmap.Width,$bitmap.Height) }
         } finally { $bitmap.Dispose() }
         Close-MagicKey $process
         $process = $null
-        Write-Host "PASS: $($names[$theme]) in language $theme persisted, rendered, and preserved profiles."
+        Write-Host "PASS: $name in language $language persisted, rendered, and preserved profiles."
     }
 } finally {
     if ($process -and !$process.HasExited) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue }

@@ -373,9 +373,9 @@ void makeInterface() {
     rowImages = ImageList_Create(1, 36, ILC_COLOR32, 1, 0);
     ListView_SetImageList(mappingList, rowImages, LVSIL_SMALL);
     LVCOLUMNW column{}; column.mask = LVCF_TEXT | LVCF_WIDTH;
-    column.pszText = const_cast<wchar_t*>(L"When you press"); column.cx = 252;
+    column.pszText = const_cast<wchar_t*>(L"When you press"); column.cx = 212;
     ListView_InsertColumn(mappingList, 0, &column);
-    column.pszText = const_cast<wchar_t*>(L"Send instead"); column.cx = 292;
+    column.pszText = const_cast<wchar_t*>(L"Send instead"); column.cx = 312;
     ListView_InsertColumn(mappingList, 1, &column);
     control(L"STATIC", L"From key", 0, 0, 310, 365, 190, 20);
     control(L"STATIC", L"To key", 0, 0, 522, 365, 190, 20);
