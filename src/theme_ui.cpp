@@ -39,6 +39,17 @@ LRESULT CALLBACK listSubclass(HWND hwnd, UINT message, WPARAM w, LPARAM l, UINT_
     if (message == WM_NCDESTROY) RemoveWindowSubclass(hwnd, listSubclass, id);
     return DefSubclassProc(hwnd, message, w, l);
 }
+LRESULT CALLBACK comboSubclass(HWND hwnd, UINT message, WPARAM w, LPARAM l, UINT_PTR id, DWORD_PTR value) {
+    LRESULT result = DefSubclassProc(hwnd, message, w, l);
+    auto ui = reinterpret_cast<ThemeUI*>(value);
+    if (message == WM_PAINT) {
+        HDC dc = GetDC(hwnd); ui->comboFrame(hwnd, dc); ReleaseDC(hwnd, dc);
+    } else if (message == WM_PRINT || message == WM_PRINTCLIENT) {
+        ui->comboFrame(hwnd, reinterpret_cast<HDC>(w));
+    }
+    if (message == WM_NCDESTROY) RemoveWindowSubclass(hwnd, comboSubclass, id);
+    return result;
+}
 }
 ThemeUI::~ThemeUI() {
     for (auto brush : {backgroundBrush, panelBrush, inputBrush}) if (brush) DeleteObject(brush);
@@ -194,5 +205,27 @@ void ThemeUI::combo(DRAWITEMSTRUCT* draw) const {
         text(draw->hDC, label, box, bodyFont, p.text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
     }
     if ((draw->itemState & ODS_FOCUS) && !(draw->itemState & ODS_NOFOCUSRECT)) DrawFocusRect(draw->hDC, &draw->rcItem);
+}
+void ThemeUI::prepareCombo(HWND combo) {
+    SetWindowSubclass(combo, comboSubclass, 1, reinterpret_cast<DWORD_PTR>(this));
+}
+void ThemeUI::comboFrame(HWND combo, HDC dc) const {
+    const auto& p = colors();
+    RECT box; GetClientRect(combo, &box);
+    const bool focused = GetFocus() == combo && !(SendMessageW(combo, WM_QUERYUISTATE, 0, 0) & UISF_HIDEFOCUS);
+    fill(dc, box, p.control);
+    roundBox(dc, box, p.control, focused ? p.accent : p.border, selected == ThemeId::Warcraft ? 3 : 8);
+    const auto index = SendMessageW(combo, CB_GETCURSEL, 0, 0);
+    if (index != CB_ERR) {
+        wchar_t label[512]{}; SendMessageW(combo, CB_GETLBTEXT, index, LPARAM(label));
+        RECT content = box; content.left += 10; content.right -= 27;
+        text(dc, label, content, bodyFont, IsWindowEnabled(combo) ? p.text : p.muted,
+            DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
+    }
+    int x = box.right - 15, y = (box.bottom + box.top) / 2;
+    bool dropped = SendMessageW(combo, CB_GETDROPPEDSTATE, 0, 0) != 0;
+    int dy = dropped ? -2 : 2;
+    line(dc, x - 4, y - dy, x, y + dy, p.muted);
+    line(dc, x, y + dy, x + 4, y - dy, p.muted);
 }
 }

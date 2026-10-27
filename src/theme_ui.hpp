@@ -25,6 +25,8 @@ public:
     LRESULT list(NMLVCUSTOMDRAW* draw) const;
     LRESULT header(NMCUSTOMDRAW* draw) const;
     void combo(DRAWITEMSTRUCT* draw) const;
+    void prepareCombo(HWND combo);
+    void comboFrame(HWND combo, HDC dc) const;
 };
 inline COLORREF color(std::uint32_t rgb) { return RGB((rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255); }
 }

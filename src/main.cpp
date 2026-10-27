@@ -220,6 +220,7 @@ HWND control(const wchar_t* type, const wchar_t* label, DWORD style, int id, int
     HWND child = CreateWindowExW(0, type, tr(label), WS_CHILD | WS_VISIBLE | style,
         x, y, w, h, window, reinterpret_cast<HMENU>(INT_PTR(id)), GetModuleHandleW(nullptr), nullptr);
     SendMessageW(child, WM_SETFONT, WPARAM(std::wstring_view(type) == L"STATIC" ? themeUI.small() : font), TRUE);
+    if (std::wstring_view(type) == WC_COMBOBOXW) themeUI.prepareCombo(child);
     if (*label && (std::wstring_view(type) == L"STATIC" || std::wstring_view(type) == L"BUTTON"))
         localizedControls.emplace_back(child, label);
     return child;
@@ -333,6 +334,8 @@ void refresh() {
         int row = ListView_InsertItem(mappingList, &item);
         ListView_SetItemText(mappingList, row, 1, target.data());
     }
+    RECT listBounds; GetClientRect(mappingList, &listBounds);
+    ListView_SetColumnWidth(mappingList, 1, listBounds.right - ListView_GetColumnWidth(mappingList, 0));
     SetWindowTextW(toggleButton, tr(enabled ? L"Pause remapping" : L"Enable remapping"));
     SetWindowTextW(statusLabel, tr(enabled ? L"Remapping active" : L"Remapping paused"));
     EnableWindow(GetDlgItem(window, DeleteProfile), settings.profiles.size() > 1);
