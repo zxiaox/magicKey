@@ -79,7 +79,7 @@ try {
             $origin = New-Object ThemeWindow+Point
             $null = [ThemeWindow]::ClientToScreen($hwnd, [ref]$origin)
             $pixel = $bitmap.GetPixel($origin.X - $rect.Left + 8, $origin.Y - $rect.Top + 110)
-            $rgb = ($pixel.R -shl 16) -bor ($pixel.G -shl 8) -bor $pixel.B
+            $rgb = ([int]$pixel.R -shl 16) -bor ([int]$pixel.G -shl 8) -bor [int]$pixel.B
             $bitmap.Save((Join-Path $output ($name + '.png')), [Drawing.Imaging.ImageFormat]::Png)
             if ($rgb -ne $backgrounds[$theme]) { throw ('Theme background mismatch for {0}: actual {1:X6}, expected {2:X6}, origin {3},{4}, bitmap {5}x{6}' -f $name,$rgb,$backgrounds[$theme],($origin.X-$rect.Left),($origin.Y-$rect.Top),$bitmap.Width,$bitmap.Height) }
         } finally { $bitmap.Dispose() }
