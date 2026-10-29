@@ -15,11 +15,11 @@ constexpr UINT PauseMessage = WM_APP + 1, InputError = WM_APP + 2, CapturedKey =
 enum ControlId { ProfileBox = 101, NewProfile, RenameProfile, DeleteProfile, ProfileName,
     MappingList, SourceBox, TargetBox, AddMapping, RemoveMapping, BlockWindows, Toggle, LanguageBox, ScanCodes, DisableTarget, CheckUpdates, ThemeBox, SectionProfile, SectionMappings };
 constexpr wchar_t ClassName[] = L"mywarkey.Portable.Window";
-HWND window, profileBox, nameEdit, mappingList, sourceBox, targetBox, blockBox, toggleButton, statusLabel, languageBox, scanBox;
+HWND window, profileBox, nameEdit, mappingList, sourceBox, targetBox, blockBox, toggleButton, statusLabel, scanBox;
 std::vector<std::pair<HWND, std::wstring>> localizedControls;
 HFONT font;
 magickey::ThemeUI themeUI;
-HWND themeBox;
+constexpr int LanguageMenu = 2000, ThemeMenu = 2010;
 HIMAGELIST rowImages;
 HANDLE hookThread, hookReady;
 DWORD hookThreadId;
@@ -27,7 +27,7 @@ bool hookInstalled = false;
 Settings settings;
 std::filesystem::path settingsPath;
 std::filesystem::path themePath;
-bool enabled = false;
+bool enabled = true;
 bool inputFailed = false;
 std::mutex engineMutex;
 Remapper engine;
@@ -225,11 +225,21 @@ HWND control(const wchar_t* type, const wchar_t* label, DWORD style, int id, int
         localizedControls.emplace_back(child, label);
     return child;
 }
-void refreshThemes() {
-    SendMessageW(themeBox, CB_RESETCONTENT, 0, 0);
-    for (const auto& theme : magickey::Themes)
-        SendMessageW(themeBox, CB_ADDSTRING, 0, LPARAM(tr(theme.name)));
-    SendMessageW(themeBox, CB_SETCURSEL, int(themeUI.theme()), 0);
+void refreshMenus() {
+    HMENU bar = CreateMenu(), options = CreatePopupMenu(), languages = CreatePopupMenu(), themes = CreatePopupMenu();
+    int index = 0;
+    for (auto name : {L"English", L"简体中文", L"日本語", L"한국어"}) {
+        AppendMenuW(languages, MF_STRING | (index == settings.language ? MF_CHECKED : 0), LanguageMenu + index, name);
+        ++index;
+    }
+    for (int i = 0; i < int(std::size(magickey::Themes)); ++i)
+        AppendMenuW(themes, MF_STRING | (i == int(themeUI.theme()) ? MF_CHECKED : 0), ThemeMenu + i, tr(magickey::Themes[i].name));
+    AppendMenuW(options, MF_POPUP, UINT_PTR(languages), tr(L"Language"));
+    AppendMenuW(options, MF_POPUP, UINT_PTR(themes), tr(L"Theme"));
+    AppendMenuW(bar, MF_POPUP, UINT_PTR(options), tr(L"Settings"));
+    HMENU previous = GetMenu(window);
+    SetMenu(window, bar); DrawMenuBar(window);
+    if (previous) DestroyMenu(previous);
 }
 void changeTheme(int choice) {
     if (!magickey::validTheme(choice)) return;
@@ -242,7 +252,7 @@ void changeTheme(int choice) {
             throw std::runtime_error("Theme save failed");
         themeUI.apply(window, mappingList, magickey::ThemeId(choice));
     } catch (...) { error(L"Could not save the theme. Check that the app folder is writable."); }
-    refreshThemes();
+    refreshMenus();
 }
 void updateCaptureButtons() {
     CaptureSlot slot;
@@ -306,9 +316,8 @@ void finishUpdate() {
 }
 void refresh() {
     for (const auto& entry : localizedControls) SetWindowTextW(entry.first, tr(entry.second.c_str()));
-    SendMessageW(languageBox, CB_SETCURSEL, settings.language, 0);
     SendMessageW(scanBox, BM_SETCHECK, settings.scanCodes ? BST_CHECKED : BST_UNCHECKED, 0);
-    refreshThemes();
+    refreshMenus();
     updateCaptureButtons();
     LVCOLUMNW column{}; column.mask = LVCF_TEXT;
     column.pszText = const_cast<wchar_t*>(tr(L"When you press"));
@@ -353,12 +362,6 @@ std::string enteredName() {
     return utf8(name);
 }
 void makeInterface() {
-    control(L"STATIC", L"Language", 0, 0, 592, 13, 130, 20);
-    languageBox = control(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_TABSTOP, LanguageBox, 592, 38, 130, 220);
-    for (auto name : {L"English", L"简体中文", L"日本語", L"한국어"})
-        SendMessageW(languageBox, CB_ADDSTRING, 0, LPARAM(name));
-    control(L"STATIC", L"Theme", 0, 0, 738, 13, 138, 20);
-    themeBox = control(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_TABSTOP, ThemeBox, 738, 38, 138, 220);
     control(L"STATIC", L"PROFILE", 0, SectionProfile, 44, 138, 206, 20);
     profileBox = control(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, ProfileBox, 44, 166, 206, 300);
     control(L"STATIC", L"Profile name", 0, 0, 44, 211, 206, 20);
@@ -395,7 +398,7 @@ void makeInterface() {
     SendMessageW(statusLabel, WM_SETFONT, WPARAM(font), TRUE);
     control(L"BUTTON", L"Check for updates", WS_TABSTOP, CheckUpdates, 474, 620, 184, 32);
     toggleButton = control(L"BUTTON", L"", BS_DEFPUSHBUTTON | WS_TABSTOP, Toggle, 676, 620, 178, 32);
-    for (HWND box : {profileBox, languageBox, themeBox}) SendMessageW(box, CB_SETITEMHEIGHT, WPARAM(-1), 28);
+    SendMessageW(profileBox, CB_SETITEMHEIGHT, WPARAM(-1), 28);
     themeUI.apply(window, mappingList, themeUI.theme());
     refresh();
 }
@@ -414,7 +417,7 @@ void command(int id, int notification) {
     }
     if (id == ProfileName || (notification != BN_CLICKED && notification != CBN_SELCHANGE)) return;
     cancelCapture();
-    if (id == ThemeBox && notification == CBN_SELCHANGE) { changeTheme(int(SendMessageW(themeBox, CB_GETCURSEL, 0, 0))); return; }
+    if (id >= ThemeMenu && id < ThemeMenu + 4) { changeTheme(id - ThemeMenu); return; }
     if (id == CheckUpdates) { beginUpdateCheck(); return; }
     if (id == DisableTarget) { targetChoice = 0; updateCaptureButtons(); return; }
     auto candidate = settings;
@@ -428,10 +431,8 @@ void command(int id, int notification) {
         auto i = SendMessageW(profileBox, CB_GETCURSEL, 0, 0);
         if (i == CB_ERR) return;
         candidate.selected = std::size_t(i);
-    } else if (id == LanguageBox && notification == CBN_SELCHANGE) {
-        auto i = SendMessageW(languageBox, CB_GETCURSEL, 0, 0);
-        if (i == CB_ERR) return;
-        candidate.language = int(i);
+    } else if (id >= LanguageMenu && id < LanguageMenu + 4) {
+        candidate.language = id - LanguageMenu;
     } else if (id == ScanCodes) {
         candidate.scanCodes = SendMessageW(scanBox, BM_GETCHECK, 0, 0) == BST_CHECKED;
     } else if (id == NewProfile || id == RenameProfile) {
@@ -629,12 +630,12 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     font = themeUI.body();
     WNDCLASSW wc{};
     wc.lpfnWndProc = windowProc; wc.hInstance = instance; wc.lpszClassName = ClassName;
-    wc.hCursor = LoadCursorW(nullptr, IDC_ARROW); wc.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
+    wc.hCursor = LoadCursorW(nullptr, IDC_ARROW); wc.hIcon = LoadIconW(instance, MAKEINTRESOURCEW(101));
     wc.hbrBackground = nullptr;
     RegisterClassW(&wc);
     RECT bounds{0, 0, 900, 680};
     DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN;
-    AdjustWindowRect(&bounds, style, FALSE);
+    AdjustWindowRect(&bounds, style, TRUE);
     window = CreateWindowExW(WS_EX_CONTROLPARENT, ClassName, L"MagicKey", style, CW_USEDEFAULT, CW_USEDEFAULT,
         bounds.right - bounds.left, bounds.bottom - bounds.top, nullptr, nullptr, instance, nullptr);
     if (!window) { CloseHandle(single); return 1; }
@@ -644,6 +645,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
         error(L"The keyboard hook could not start. Close MagicKey and try again.");
         DestroyWindow(window);
     } else {
+        syncEngine(); refresh();
         ShowWindow(window, show); UpdateWindow(window);
         if (invalidTheme) error(L"The saved theme could not be loaded. Ivory is being used. Your profiles are unchanged.");
     }

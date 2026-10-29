@@ -1,5 +1,7 @@
 #include <windows.h>
 #include "app_config.hpp"
+101 ICON "MagicKey.ico"
+102 RCDATA "warcraft-frozen-throne.jpg"
 1 RT_MANIFEST "app.manifest"
 2 RCDATA "THIRD-PARTY-NOTICES.txt"
 1 VERSIONINFO

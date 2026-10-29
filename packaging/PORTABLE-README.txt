@@ -7,11 +7,11 @@ Python, .NET, or additional C++ runtime installation is needed.
 Default mappings: Numpad 7 -> Q, Numpad 8 -> W, Numpad 5 -> R.
 Profiles created with New start with Q -> Numpad 7, W -> Numpad 8,
 and R -> Numpad 5. Existing profiles keep their saved mappings.
-Top-row numbers are unchanged. The app starts paused.
+Top-row numbers are unchanged. The app starts enabled with the selected profile.
 Click a From/To key button, press and release a key, then click Add / update.
 Enable remapping and switch to your game. Ctrl + Alt + F12 pauses immediately.
 Close the app to stop remapping. The interface is available in four languages.
-Choose Theme at the upper right: Ivory, Midnight, Arcane, or Warcraft III.
+Choose Settings > Theme in the top menu: Ivory, Midnight, Arcane, or Warcraft III.
 Your theme is saved in MagicKey.theme separately from saved profiles.
 
 Check for updates contacts this repository's public GitHub Releases. You can
@@ -37,3 +37,6 @@ Q/W/R trigger the abilities first. If the game runs as administrator, MagicKey
 may need the same privilege level. Compatibility depends on the game/client.
 
 Third-party software notices are included in THIRD-PARTY-NOTICES.txt.
+
+Language is available under Settings > Language. Ctrl + Alt + F12 pauses
+remapping at any time. The Warcraft artwork and app icon are built into the EXE.

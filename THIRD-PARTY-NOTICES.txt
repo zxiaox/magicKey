@@ -23,3 +23,13 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+
+Warcraft III: The Frozen Throne cover artwork
+Embedded file: assets/warcraft-frozen-throne.jpg
+Source page: https://en.wikipedia.org/wiki/Warcraft_III:_The_Frozen_Throne
+Image: https://upload.wikimedia.org/wikipedia/en/8/87/Warcraftiii-frozen-throne-boxcover.jpg
+Copyright Blizzard Entertainment. All rights remain with their respective owners.
+This artwork is separate from MagicKey's original code and icon; it is not
+covered by the nlohmann/json MIT license above. MagicKey is not affiliated
+with or endorsed by Blizzard Entertainment.

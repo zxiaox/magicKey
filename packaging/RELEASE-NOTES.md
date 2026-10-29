@@ -1,6 +1,13 @@
 Portable MagicKey for Windows 10/11 x64. End users do not need Visual Studio or an installer.
 
-New in this version: a refreshed interface with a profile sidebar, keycap mapping table, clear status bar, and four built-in themes: **Ivory**, **Midnight**, **Arcane**, and **Warcraft III**. The Warcraft theme includes stone colors, bronze borders, and original shield-and-sword decoration. Choose **Theme** at the upper right; the choice survives restarting and updating. Saved profiles and their file format are unchanged.
+New in this version:
+
+- Original app icon showing two keyboard buttons and remapping arrows, visible in Explorer, the title bar, task switching, and the app header.
+- Language and theme choices now live in the top **Settings** menu, with checked selections and all four interface languages.
+- Remapping starts **enabled** with your selected profile on every launch, including after updating. **Pause remapping** and **Ctrl + Alt + F12** pause it immediately.
+- The **Warcraft III** theme includes the Frozen Throne cover artwork from the supplied Wikipedia page, embedded in the EXE for offline use. Solid panels keep controls readable.
+
+Existing profile mappings and theme preferences are preserved.
 
 Download **MagicKey-windows-x64-portable.zip**, extract it into a writable folder, and run **MagicKey.exe**. The executable is also available separately for existing installations and the in-app updater. The source-code archives are intended for developers.
 

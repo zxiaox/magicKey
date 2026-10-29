@@ -14,13 +14,13 @@ A portable, native Windows keyboard remapper. No installer, Python, .NET, servic
 - Create, rename, and delete profiles; add, update, and remove mappings.
 - Disable individual keys by selecting **Disabled** as their destination.
 - Disable both Windows keys with a per-profile checkbox. This takes priority over mappings from those keys.
-- Start paused; enable or pause using the main button. **Ctrl + Alt + F12** always pauses, including when those keys are remapped.
+- Start enabled with the selected profile; pause or resume using the main button. **Ctrl + Alt + F12** always pauses, including when those keys are remapped.
 - Release held output keys on pause, profile changes, edits, and normal exit.
 - Run minimized while remapping remains active. Closing the window stops remapping.
 
 ## Themes and refreshed interface
 
-Choose **Theme** at the upper right to switch instantly between **Ivory**, **Midnight**, **Arcane**, and **Warcraft III**. The Warcraft theme uses stone colors, bronze borders, gold highlights, and original shield-and-sword decoration drawn with Windows graphics APIs. No game artwork, external assets, or additional downloads are needed.
+Choose **Settings → Theme** in the top menu to switch instantly between **Ivory**, **Midnight**, **Arcane**, and **Warcraft III**. The Warcraft theme uses the Frozen Throne cover artwork from the user-provided Wikipedia page, with bronze borders and solid panels for readable controls. The artwork and the original keyboard-remapping app icon are embedded in the executable, so no separate files or runtime downloads are needed. Artwork attribution is included in THIRD-PARTY-NOTICES.txt.
 
 Profiles sit in a sidebar; mappings appear as keycaps with direction arrows. Key capture, options, and the status/update bar have separate areas. Buttons, table rows, headers, checkboxes, input fields, and dropdown contents follow the selected palette. Keyboard focus indicators remain visible, and theme text/background pairs are checked for readable contrast. Windows title-bar colors follow the theme where supported by the OS; native scrollbars and standard system message boxes can retain the Windows appearance.
 
@@ -70,22 +70,22 @@ When an update is available, approve **Download and install**. MagicKey download
 
 The verified file and a temporary copy of the current app are staged in `.MagicKey-update-*` beside the executable. The temporary helper inherits a handle to the exact running parent process, waits for it to exit, verifies the file again, copies the old executable to `MagicKey.exe.backup`, replaces the executable, and restarts it. If replacement fails the original remains available; if process creation fails after replacement, the helper restores the backup and tries to start the original. This does not monitor the health of an app that starts successfully and then crashes. Temporary staging files are removed after restart; an interrupted update may leave a staging folder that can be deleted after closing the app.
 
-The helper never rewrites `mywarkey.profiles`. Language, profiles, and preferences survive; the app restarts paused as usual. The legacy profile filename and single-instance identity are intentional, allowing upgrades without data migration or two remappers running together. A writable app folder is required; update privileges match the running app. Closing MagicKey during a request cancels it and finishes closing after the current bounded network operation returns. No scripts, installers, administrator prompts, or installed updater services are used.
+The helper never rewrites `mywarkey.profiles`. Language, profiles, and preferences survive; the app restarts enabled with the selected profile. The legacy profile filename and single-instance identity are intentional, allowing upgrades without data migration or two remappers running together. A writable app folder is required; update privileges match the running app. Closing MagicKey during a request cancels it and finishes closing after the current bounded network operation returns. No scripts, installers, administrator prompts, or installed updater services are used.
 
 For manual recovery, close MagicKey, rename `MagicKey.exe.backup` to `MagicKey.exe`, and keep the profiles file beside it. If you renamed your executable, the backup uses that executable's name followed by `.backup`.
 
 ## Use
 
-1. Open `MagicKey.exe`. The app starts paused so you can review the selected profile.
+1. Open `MagicKey.exe`. The selected profile is enabled immediately. Use **Pause remapping** or **Ctrl + Alt + F12** if you want to pause it.
 2. Click the button under **From key**, then press and release the source key. Click the button under **To key**, then press and release the destination. Click **Add / update** to save the mapping. To block the source, click **Disabled** instead of capturing a destination. Selecting an existing row fills both buttons for editing. To remove a mapping, select its row and click **Remove** above the list.
 3. To create a profile, type a unique name in **Profile name** and click **New**. It starts with **Q → Numpad 7**, **W → Numpad 8**, and **R → Numpad 5**. You can edit or remove these mappings. To rename the selected profile, edit its name and click **Rename**. Switching profiles applies the saved mappings immediately if remapping is enabled.
 4. Check **Disable both Windows keys** if desired.
-5. Click **Enable remapping**, then switch to the application where you want to use it. Remapping deliberately bypasses the MagicKey editor so its controls stay usable.
+5. Switch to the application where you want to use it. If you paused remapping, click **Enable remapping** first. Remapping deliberately bypasses the MagicKey editor so its controls stay usable.
 6. Press **Ctrl + Alt + F12** to pause from another application, or close MagicKey to stop.
 
 Changes save automatically to `mywarkey.profiles` beside the executable. Keep that file with the executable when moving between computers. Saving uses a temporary file followed by replacement; save failures are reported and the previous settings remain active. Invalid profile files are preserved and reported on startup rather than overwritten. Enable/pause state is never persisted.
 
-Use the **Language** menu at the upper right to change the interface. UI labels, key names, status messages, and application dialogs are translated. Standard message-box buttons follow the Windows display language. Letters, punctuation, function-key names, and your own profile names are unchanged. The Windows build uses UTF-8 source encoding for all four languages.
+Use the **Settings → Language** menu to change the interface. UI labels, key names, status messages, and application dialogs are translated. Standard message-box buttons follow the Windows display language. Letters, punctuation, function-key names, and your own profile names are unchanged. The Windows build uses UTF-8 source encoding for all four languages.
 
 During capture, the active button says **Press a key...**. Click it again to cancel, click the other key button to switch sides, or switch away from MagicKey to cancel. The first newly pressed key is accepted when you release it; held-key repeats do not create additional captures. Enter, Tab, Escape, modifiers, and Windows keys can be captured without activating the interface. Ctrl + Alt + F12 keeps its emergency-pause behavior. Captured keys and their releases are consumed, and remapping resumes its normal behavior in other apps after leaving the editor.
 
@@ -96,7 +96,7 @@ Number labels distinguish **Top row 7** from **Numpad 7**, and likewise for ever
 1. Close the running MagicKey app. Back up `mywarkey.profiles` before upgrading.
 2. Copy the updated source files into your Windows project folder and run `build-windows.bat` again.
 3. Replace your previous `MagicKey.exe` with `build-windows\Release\MagicKey.exe`, leaving your profile file beside it. If you run the executable directly from the build folder, copy your profile file there too.
-4. Choose your language in the upper-right menu and leave **Game-compatible input (scan codes)** checked when testing Warcraft III.
+4. Choose your language in **Settings → Language** and leave **Game-compatible input (scan codes)** checked when testing Warcraft III.
 
 The new version reads version-1 and version-2 profile files. An untouched legacy **Default** profile containing exactly A → Q and W → Numpad 7 (version 1), or top-row 7 → Q and 8 → W, is updated to **Numpad 7 → Q**, **Numpad 8 → W**, and **Numpad 5 → R**. Other profiles, including a customized Default profile, are preserved. Each profile created with **New** starts with **Q → Numpad 7**, **W → Numpad 8**, and **R → Numpad 5**. Existing empty profiles stay empty; the defaults are only applied on creation. These updates do not change the profile file format.
 
@@ -144,4 +144,4 @@ Implementation references: [LowLevelKeyboardProc](https://learn.microsoft.com/en
 
 Updater tests additionally cover strict numeric versions, malformed release metadata, draft/prerelease rejection, trusted repository URLs, exact asset selection, size limits, checksum parsing, x64 PE identification, and Windows command-line quoting. The Windows helper integration test runs in CI; game compatibility and translated interface layout still require a real Windows smoke test.
 
-Theme tests cover all four preference values, malformed appearance files, and text contrast. Windows UI tests switch each theme through its real selector, restart the app, verify the saved selection and rendered background, ensure profiles remain byte-identical, and capture screenshots for all four language/theme combinations.
+Theme tests cover all four preference values, malformed appearance files, and text contrast. Windows UI tests switch each theme through its real menu, restart the app, verify startup is enabled, emergency pause works, saved menu selections persist, the app icon is present, and the background artwork renders, ensure profiles remain byte-identical, and capture screenshots for all four language/theme combinations.

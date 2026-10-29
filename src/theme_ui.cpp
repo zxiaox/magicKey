@@ -3,6 +3,7 @@
 #include "app_config.hpp"
 #include <dwmapi.h>
 #include <uxtheme.h>
+#include <shlwapi.h>
 #include <algorithm>
 #include <string>
 
@@ -52,10 +53,27 @@ LRESULT CALLBACK comboSubclass(HWND hwnd, UINT message, WPARAM w, LPARAM l, UINT
 }
 }
 ThemeUI::~ThemeUI() {
+    delete artwork;
+    if (artworkStream) artworkStream->Release();
+    if (graphicsToken) Gdiplus::GdiplusShutdown(graphicsToken);
     for (auto brush : {backgroundBrush, panelBrush, inputBrush}) if (brush) DeleteObject(brush);
     for (auto font : {bodyFont, smallFont, strongFont, headingFont}) if (font) DeleteObject(font);
 }
 void ThemeUI::initialize(ThemeId theme) {
+    Gdiplus::GdiplusStartupInput startup;
+    if (Gdiplus::GdiplusStartup(&graphicsToken, &startup, nullptr) == Gdiplus::Ok) {
+        auto module = GetModuleHandleW(nullptr);
+        auto resource = FindResourceW(module, MAKEINTRESOURCEW(102), RT_RCDATA);
+        auto data = resource ? LoadResource(module, resource) : nullptr;
+        if (data) {
+            artworkStream = SHCreateMemStream(static_cast<const BYTE*>(LockResource(data)), SizeofResource(module, resource));
+            if (artworkStream) {
+                artwork = Gdiplus::Image::FromStream(artworkStream);
+                if (artwork->GetLastStatus() != Gdiplus::Ok) { delete artwork; artwork = nullptr; }
+            }
+        }
+    }
+
     bodyFont = makeFont(15, FW_NORMAL); smallFont = makeFont(13, FW_NORMAL);
     strongFont = makeFont(15, FW_SEMIBOLD); headingFont = makeFont(30, FW_SEMIBOLD);
     apply(nullptr, nullptr, theme);
@@ -90,10 +108,20 @@ void ThemeUI::paint(HDC dc, const RECT& bounds, bool enabled, int language) cons
     auto tr = [language](const wchar_t* s) { return mywarkey::translate(s, language); };
     fill(dc, bounds, p.background);
     if (selected == ThemeId::Warcraft) {
-        // Original stonework and bronze ornament, drawn entirely with GDI.
-        for (int x = 0; x < bounds.right; x += 72) {
-            line(dc, x, 0, x + 36, 103, p.control);
-            line(dc, x + 36, 0, x, 103, p.control);
+        if (artwork) {
+            Gdiplus::Graphics graphics(dc);
+            graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+            const float width = float(artwork->GetWidth()), height = float(artwork->GetHeight());
+            // Cover the whole client area, then show the face prominently in the header.
+            Gdiplus::ColorMatrix matrix = {1,0,0,0,0, 0,1,0,0,0, 0,0,1,0,0, 0,0,0,0.32f,0, 0,0,0,0,1};
+            Gdiplus::ImageAttributes attributes;
+            attributes.SetColorMatrix(&matrix);
+            float sourceHeight = width * float(bounds.bottom) / float(bounds.right);
+            graphics.DrawImage(artwork, Gdiplus::Rect(0,0,bounds.right,bounds.bottom),
+                0.0f, (height-sourceHeight)/2, width, sourceHeight, Gdiplus::UnitPixel, &attributes);
+            matrix.m[3][3] = 0.75f; attributes.SetColorMatrix(&matrix);
+            graphics.DrawImage(artwork, Gdiplus::Rect(480,0,420,103),
+                0.0f, 58.0f, width, width*103/420, Gdiplus::UnitPixel, &attributes);
         }
         line(dc, 24, 103, 876, 103, p.border);
     }
@@ -106,17 +134,8 @@ void ThemeUI::paint(HDC dc, const RECT& bounds, bool enabled, int language) cons
             }
         }
     }
-    if (selected == ThemeId::Warcraft) {
-        POINT shield[]{{30,26},{52,20},{74,26},{72,57},{52,75},{32,57}};
-        HBRUSH brush = CreateSolidBrush(color(p.control)); HPEN pen = CreatePen(PS_SOLID, 2, color(p.accent));
-        auto oldB = SelectObject(dc, brush); auto oldP = SelectObject(dc, pen); Polygon(dc, shield, 6);
-        SelectObject(dc, oldB); SelectObject(dc, oldP); DeleteObject(brush); DeleteObject(pen);
-        line(dc, 42, 36, 62, 58, p.accent, 2); line(dc, 62, 36, 42, 58, p.accent, 2);
-        line(dc, 38, 51, 47, 59, p.accent, 2); line(dc, 58, 59, 66, 51, p.accent, 2);
-    } else {
-        roundBox(dc, {28,26,76,74}, p.accent, p.accent, 14);
-        text(dc, L"M", {28,26,76,74}, headingFont, p.accentInk, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-    }
+    auto icon = static_cast<HICON>(LoadImageW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(101), IMAGE_ICON, 52, 52, LR_SHARED));
+    if (icon) DrawIconEx(dc, 27, 24, icon, 52, 52, 0, nullptr, DI_NORMAL);
     text(dc, L"MagicKey", {92,23,360,61}, headingFont, selected == ThemeId::Warcraft ? p.accent : p.text);
     const auto subtitle = std::wstring(L"v") + MAGICKEY_VERSION_W + L"  /  " + tr(L"Portable keyboard control");
     text(dc, subtitle.c_str(), {94,64,550,86}, smallFont, p.muted);

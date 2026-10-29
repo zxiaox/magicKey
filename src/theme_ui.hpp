@@ -1,11 +1,16 @@
 #pragma once
 #include <windows.h>
 #include <commctrl.h>
+#include <objidl.h>
+#include <gdiplus.h>
 #include "themes.hpp"
 
 namespace magickey {
 enum class ButtonRole { Secondary, Primary, Danger, Key, Checkbox };
 class ThemeUI {
+    ULONG_PTR graphicsToken = 0;
+    IStream* artworkStream = nullptr;
+    Gdiplus::Image* artwork = nullptr;
     ThemeId selected = ThemeId::Ivory;
     HBRUSH backgroundBrush = nullptr, panelBrush = nullptr, inputBrush = nullptr;
     HFONT bodyFont = nullptr, smallFont = nullptr, strongFont = nullptr, headingFont = nullptr;

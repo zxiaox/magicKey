@@ -12,6 +12,11 @@ public static class ThemeWindow {
     [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr h, IntPtr dc, uint flags);
     [DllImport("user32.dll")] public static extern IntPtr GetDlgItem(IntPtr h, int id);
     [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr h, uint msg, IntPtr w, IntPtr l);
+    [DllImport("user32.dll")] public static extern IntPtr GetMenu(IntPtr h);
+    [DllImport("user32.dll")] public static extern IntPtr GetSubMenu(IntPtr h, int index);
+    [DllImport("user32.dll")] public static extern uint GetMenuState(IntPtr h, uint item, uint flags);
+    [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr h, System.Text.StringBuilder text, int count);
+    [DllImport("user32.dll", EntryPoint="GetClassLongPtrW")] public static extern IntPtr GetClassLongPtr(IntPtr h, int index);
     [DllImport("user32.dll")] public static extern bool UpdateWindow(IntPtr h);
     [DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr value);
 }
@@ -54,18 +59,31 @@ try {
         $profileHash = (Get-FileHash -LiteralPath $profile -Algorithm SHA256).Hash
         $process = Start-MagicKey
         $hwnd = $process.MainWindowHandle
-        $selector = [ThemeWindow]::GetDlgItem($hwnd, 117)
-        if ($selector -eq [IntPtr]::Zero) { throw 'Theme selector missing' }
-        $null = [ThemeWindow]::SendMessage($selector, 0x14E, [IntPtr]$theme, [IntPtr]::Zero) # CB_SETCURSEL
-        $null = [ThemeWindow]::SendMessage($hwnd, 0x111, [IntPtr](117 -bor (1 -shl 16)), $selector)
+        if ([ThemeWindow]::GetClassLongPtr($hwnd, -14) -eq [IntPtr]::Zero) { throw 'App icon missing' }
+        $toggle = [ThemeWindow]::GetDlgItem($hwnd, 112)
+        $activeLabel = New-Object Text.StringBuilder 256
+        $null = [ThemeWindow]::GetWindowText($toggle, $activeLabel, 256)
+        if ($language -eq 0 -and $activeLabel.ToString() -cne 'Pause remapping') { throw 'App did not start enabled' }
+        $null = [ThemeWindow]::SendMessage($hwnd, 0x111, [IntPtr](2010 + $theme), [IntPtr]::Zero)
         Start-Sleep -Milliseconds 200
         if ([IO.File]::ReadAllText((Join-Path $root 'MagicKey.theme')).Trim() -cne "MAGICKEY_THEME 1 $theme") { throw 'Theme was not saved' }
         if ((Get-FileHash -LiteralPath $profile -Algorithm SHA256).Hash -cne $profileHash) { throw 'Changing themes changed profiles' }
+        # Pause before closing: every normal launch must still start enabled.
+        $null = [ThemeWindow]::SendMessage($hwnd, 0x8001, [IntPtr]::Zero, [IntPtr]::Zero)
+        $pausedLabel = New-Object Text.StringBuilder 256
+        $null = [ThemeWindow]::GetWindowText($toggle, $pausedLabel, 256)
+        if ($pausedLabel.ToString() -ceq $activeLabel.ToString()) { throw 'Emergency pause did not change state' }
         Close-MagicKey $process
         $process = Start-MagicKey
         $hwnd = $process.MainWindowHandle
-        $selector = [ThemeWindow]::GetDlgItem($hwnd, 117)
-        if ([ThemeWindow]::SendMessage($selector, 0x147, [IntPtr]::Zero, [IntPtr]::Zero).ToInt32() -ne $theme) { throw 'Theme did not persist after restart' }
+        $restartedLabel = New-Object Text.StringBuilder 256
+        $null = [ThemeWindow]::GetWindowText([ThemeWindow]::GetDlgItem($hwnd, 112), $restartedLabel, 256)
+        if ($restartedLabel.ToString() -cne $activeLabel.ToString()) { throw 'Restart did not enable remapping' }
+        $options = [ThemeWindow]::GetSubMenu([ThemeWindow]::GetMenu($hwnd), 0)
+        $themes = [ThemeWindow]::GetSubMenu($options, 1)
+        if (([ThemeWindow]::GetMenuState($themes, [uint32](2010 + $theme), 0) -band 8) -eq 0) { throw 'Theme menu selection did not persist' }
+        $languages = [ThemeWindow]::GetSubMenu($options, 0)
+        if (([ThemeWindow]::GetMenuState($languages, [uint32](2000 + $language), 0) -band 8) -eq 0) { throw 'Language menu selection did not persist' }
         $null = [ThemeWindow]::UpdateWindow($hwnd)
         Start-Sleep -Milliseconds 200
         $rect = New-Object ThemeWindow+Rect
@@ -80,9 +98,25 @@ try {
             $null = [ThemeWindow]::ClientToScreen($hwnd, [ref]$origin)
             $pixel = $bitmap.GetPixel($origin.X - $rect.Left + 8, $origin.Y - $rect.Top + 110)
             $rgb = ([int]$pixel.R -shl 16) -bor ([int]$pixel.G -shl 8) -bor [int]$pixel.B
+            if ($theme -eq 3) {
+                $colors = [Collections.Generic.HashSet[int]]::new()
+                for ($x = 540; $x -lt 840; $x += 5) {
+                    for ($y = 10; $y -lt 90; $y += 5) {
+                        $null = $colors.Add($bitmap.GetPixel($origin.X-$rect.Left+$x, $origin.Y-$rect.Top+$y).ToArgb())
+                    }
+                }
+                if ($colors.Count -lt 100) { throw 'Warcraft artwork was not rendered' }
+            }
             $bitmap.Save((Join-Path $output ($name + '.png')), [Drawing.Imaging.ImageFormat]::Png)
-            if ($rgb -ne $backgrounds[$theme]) { throw ('Theme background mismatch for {0}: actual {1:X6}, expected {2:X6}, origin {3},{4}, bitmap {5}x{6}' -f $name,$rgb,$backgrounds[$theme],($origin.X-$rect.Left),($origin.Y-$rect.Top),$bitmap.Width,$bitmap.Height) }
+            if ($theme -ne 3 -and $rgb -ne $backgrounds[$theme]) { throw ('Theme background mismatch for {0}: actual {1:X6}, expected {2:X6}, origin {3},{4}, bitmap {5}x{6}' -f $name,$rgb,$backgrounds[$theme],($origin.X-$rect.Left),($origin.Y-$rect.Top),$bitmap.Width,$bitmap.Height) }
         } finally { $bitmap.Dispose() }
+        $nextLanguage = ($language + 1) % 4
+        $null = [ThemeWindow]::SendMessage($hwnd, 0x111, [IntPtr](2000 + $nextLanguage), [IntPtr]::Zero)
+        Close-MagicKey $process
+        $process = Start-MagicKey
+        $options = [ThemeWindow]::GetSubMenu([ThemeWindow]::GetMenu($process.MainWindowHandle), 0)
+        $languages = [ThemeWindow]::GetSubMenu($options, 0)
+        if (([ThemeWindow]::GetMenuState($languages, [uint32](2000 + $nextLanguage), 0) -band 8) -eq 0) { throw 'Language change did not persist' }
         Close-MagicKey $process
         $process = $null
         Write-Host "PASS: $name in language $language persisted, rendered, and preserved profiles."
