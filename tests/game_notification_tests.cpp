@@ -8,6 +8,7 @@ std::wstring draft;
 std::vector<std::wstring> submitted;
 LRESULT CALLBACK receiver(HWND window, UINT message, WPARAM w, LPARAM l) {
     if (message == WM_KEYDOWN && w == VK_ESCAPE) { chat = false; draft.clear(); return 0; }
+    if ((message == WM_SYSKEYDOWN || message == WM_SYSKEYUP) && w == VK_MENU) return 0;
     if (message == WM_CHAR) {
         if (w == 13) {
             if (chat) { submitted.push_back(draft); draft.clear(); }

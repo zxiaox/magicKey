@@ -69,15 +69,15 @@ try {
         if ([IO.File]::ReadAllText((Join-Path $root 'MagicKey.theme')).Trim() -cne "MAGICKEY_THEME 1 $theme") { throw 'Theme was not saved' }
         if ((Get-FileHash -LiteralPath $profile -Algorithm SHA256).Hash -cne $profileHash) { throw 'Changing themes changed profiles' }
         # Pause before closing: every normal launch must still start enabled.
-        $null = [ThemeWindow]::SendMessage($hwnd, 0x111, [IntPtr]112, [IntPtr]::Zero)
+        $null = [ThemeWindow]::SendMessage($hwnd, 0x8001, [IntPtr]::Zero, [IntPtr]::Zero)
         $pausedLabel = New-Object Text.StringBuilder 256
         $null = [ThemeWindow]::GetWindowText($toggle, $pausedLabel, 256)
-        if ($pausedLabel.ToString() -ceq $activeLabel.ToString()) { throw 'Pause button did not change state' }
-        $null = [ThemeWindow]::SendMessage($hwnd, 0x111, [IntPtr]112, [IntPtr]::Zero)
+        if ($pausedLabel.ToString() -ceq $activeLabel.ToString()) { throw 'Toggle shortcut did not pause' }
+        $null = [ThemeWindow]::SendMessage($hwnd, 0x8001, [IntPtr]::Zero, [IntPtr]::Zero)
         $resumedLabel = New-Object Text.StringBuilder 256
         $null = [ThemeWindow]::GetWindowText($toggle, $resumedLabel, 256)
-        if ($resumedLabel.ToString() -cne $activeLabel.ToString()) { throw 'Resume button did not enable remapping' }
-        $null = [ThemeWindow]::SendMessage($hwnd, 0x111, [IntPtr]112, [IntPtr]::Zero)
+        if ($resumedLabel.ToString() -cne $activeLabel.ToString()) { throw 'Toggle shortcut did not resume' }
+        $null = [ThemeWindow]::SendMessage($hwnd, 0x8001, [IntPtr]::Zero, [IntPtr]::Zero)
         Close-MagicKey $process
         $process = Start-MagicKey
         $hwnd = $process.MainWindowHandle
@@ -134,7 +134,7 @@ try {
     $process = Start-MagicKey
     $hwnd = $process.MainWindowHandle
     foreach ($index in 0..9) {
-        $null = [ThemeWindow]::SendMessage($hwnd, 0x111, [IntPtr]112, [IntPtr]::Zero) # Pause first.
+        $null = [ThemeWindow]::SendMessage($hwnd, 0x8001, [IntPtr]::Zero, [IntPtr]::Zero) # Pause first.
         $null = [ThemeWindow]::SendMessage($hwnd, 0x8005, [IntPtr]$index, [IntPtr]::Zero)
         $contents = [IO.File]::ReadAllText($profile)
         if (!$contents.StartsWith("MYWARKEY 2 $index 11 0 1")) { throw "Profile slot $index did not persist" }

@@ -164,12 +164,9 @@ LRESULT CALLBACK keyboardProc(int code, WPARAM message, LPARAM value) {
     auto shortcut = toggleHotkey.event(source, down, wasDown,
         physical[VK_LCONTROL] || physical[VK_RCONTROL], physical[VK_LMENU] || physical[VK_RMENU]);
     if (shortcut.swallow) {
-        bool newEnabled = false;
         {
             std::lock_guard<std::mutex> lock(engineMutex);
             if (shortcut.toggle) {
-                liveEnabled = !liveEnabled;
-                newEnabled = liveEnabled;
                 inputFailed = false;
                 capture.cancel();
                 ++captureGeneration;
@@ -177,7 +174,7 @@ LRESULT CALLBACK keyboardProc(int code, WPARAM message, LPARAM value) {
             }
             if (!down) capture.event(source, false, wasDown);
         }
-        if (shortcut.toggle) PostMessageW(window, ToggleMessage, newEnabled, LPARAM(GetForegroundWindow()));
+        if (shortcut.toggle) PostMessageW(window, ToggleMessage, 0, LPARAM(GetForegroundWindow()));
         return 1;
     }
     std::size_t profileCount;
@@ -575,8 +572,12 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
             if (LOWORD(w) != WA_INACTIVE) { std::lock_guard<std::mutex> lock(engineMutex); engine.release(sendKey); }
             return 0;
         case ToggleMessage:
-            { std::lock_guard<std::mutex> lock(engineMutex); enabled = liveEnabled; }
-            gameNotifications.queue(reinterpret_cast<HWND>(l), toggleMessage(w != 0));
+            // Serialize toggles and profile changes on the UI thread so rapid
+            // alternating shortcuts preserve event order and final state.
+            enabled = !enabled;
+            { std::lock_guard<std::mutex> lock(engineMutex); inputFailed = false; }
+            syncEngine();
+            gameNotifications.queue(reinterpret_cast<HWND>(l), toggleMessage(enabled));
             cancelNotification = false; notificationTyping = gameNotifications.typing();
             refresh(); return 0;
         case ProfileSwitch: {
