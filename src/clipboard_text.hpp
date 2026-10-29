@@ -14,7 +14,7 @@ public:
     ClipboardText(const ClipboardText&) = delete;
     ClipboardText& operator=(const ClipboardText&) = delete;
     ~ClipboardText();
-    bool put(const std::wstring& text);
+    bool put(const std::wstring& text, bool classicUtf8 = false);
     bool restore();
 };
 }

@@ -28,15 +28,26 @@ ClipboardText::~ClipboardText() {
     restore(); discard();
     if (owner) DestroyWindow(owner);
 }
-bool ClipboardText::put(const std::wstring& text) {
+bool ClipboardText::put(const std::wstring& text, bool classicUtf8) {
     if (!restore()) return false;
     if (!owner) owner = CreateWindowExW(0, L"STATIC", L"MagicKey clipboard owner", 0,0,0,0,0,HWND_MESSAGE,nullptr,GetModuleHandleW(nullptr),nullptr);
     if (!owner) return false;
-    HGLOBAL replacement = GlobalAlloc(GMEM_MOVEABLE, (text.size() + 1) * sizeof(wchar_t));
+    // Classic Warcraft consumes CF_TEXT as UTF-8 bytes. Supplying only UTF-16
+    // makes Windows synthesize ANSI bytes using the system locale instead.
+    std::string utf8;
+    if (classicUtf8) {
+        int bytes = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, text.c_str(), -1, nullptr, 0, nullptr, nullptr);
+        if (!bytes) return false;
+        utf8.resize(bytes);
+        if (!WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, text.c_str(), -1, utf8.data(), bytes, nullptr, nullptr)) return false;
+    }
+    SIZE_T size = classicUtf8 ? utf8.size() : (text.size() + 1) * sizeof(wchar_t);
+    HGLOBAL replacement = GlobalAlloc(GMEM_MOVEABLE, size);
     if (!replacement) return false;
     auto buffer = GlobalLock(replacement);
     if (!buffer) { GlobalFree(replacement); return false; }
-    std::memcpy(buffer, text.c_str(), (text.size() + 1) * sizeof(wchar_t)); GlobalUnlock(replacement);
+    const void* source = classicUtf8 ? static_cast<const void*>(utf8.data()) : static_cast<const void*>(text.c_str());
+    std::memcpy(buffer, source, size); GlobalUnlock(replacement);
     if (!OpenClipboard(owner)) { GlobalFree(replacement); return false; }
     // Duplicate every existing format before changing anything. If one cannot
     // be preserved safely, leave the clipboard untouched and report failure.
@@ -53,7 +64,7 @@ bool ClipboardText::put(const std::wstring& text) {
     if (!valid || GetLastError() != ERROR_SUCCESS || !EmptyClipboard()) {
         CloseClipboard(); GlobalFree(replacement); discard(); return false;
     }
-    bool placed = SetClipboardData(CF_UNICODETEXT, replacement) != nullptr;
+    bool placed = SetClipboardData(classicUtf8 ? CF_TEXT : CF_UNICODETEXT, replacement) != nullptr;
     if (!placed) GlobalFree(replacement);
     if (placed) {
         for (const wchar_t* marker : {L"CanIncludeInClipboardHistory", L"CanUploadToCloudClipboard"}) {

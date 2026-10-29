@@ -1,13 +1,10 @@
 Portable MagicKey for Windows 10/11 x64. End users do not need Visual Studio or an installer.
 
-New in this version:
+New in this version: corrected the clipboard encoding used by classic Warcraft notifications. Classic targets now receive **UTF-8 bytes in CF_TEXT**, rather than depending on Windows to convert UTF-16 into the system ANSI code page. Modern recognized Warcraft executables retain Unicode clipboard text.
 
-- Notifications now follow the selected interface language: English, Simplified Chinese, Japanese, or Korean.
-- Non-ASCII profile names and localized messages use Unicode clipboard paste, addressing classic Warcraft dropping Unicode key events. Existing clipboard formats are preserved when they can be safely copied; a newer user copy is never overwritten. If preservation fails, the notification stops with a diagnostic.
-- Removed the long 300/250 ms waits. Chat-open/text-settle waits are now 50/50 ms, retaining 80 ms Enter holds for reliability. Typical sequences take about 0.3–0.4 seconds after shortcut release.
-- Diagnostics includes the exact intended message text for checking the selected profile name.
+English messages now paste as complete text too, avoiding dropped letters and keyboard-layout/Caps Lock effects from rapid scan-code typing. Translations and names are tested against exact expected messages in all four languages, including **诸葛亮**, using a classic-style narrow UTF-8 clipboard reader. The earlier receiver tested only Unicode clipboard reads.
 
-Use notification shortcuts during gameplay with chat closed. Multilingual messages temporarily use the clipboard; clipboard history tools may observe that text. Actual game behavior still requires testing in your Warcraft installation. Profiles, themes and shortcuts are preserved.
+The shorter timings, clipboard preservation, profiles, themes and shortcuts are preserved. Diagnostics reports the selected transport. Actual Warcraft acceptance still needs verification in the game.
 
 Download **MagicKey-windows-x64-portable.zip**, extract it into a writable folder, and run **MagicKey.exe**. The executable is also available separately for existing installations and the in-app updater. The source-code archives are intended for developers.
 

@@ -4,7 +4,7 @@
 #include <vector>
 namespace mywarkey {
 namespace {
-DWORD warcraftProcess(HWND window, std::wstring& name) {
+DWORD warcraftProcess(HWND window, std::wstring& name, bool& classic) {
     DWORD pid = 0;
     if (!window || GetForegroundWindow() != window) { name = L"No matching foreground window"; return 0; }
     GetWindowThreadProcessId(window, &pid);
@@ -24,6 +24,9 @@ DWORD warcraftProcess(HWND window, std::wstring& name) {
     } else queryError = GetLastError();
     const bool byProcess = warcraftExecutable(executable);
     const bool byClass = warcraftWindowClass(className);
+    std::wstring lower = executable;
+    for (auto& c : lower) if (c >= L'A' && c <= L'Z') c += L'a' - L'A';
+    classic = lower == L"war3.exe" || (byClass && !byProcess);
     // A window title alone (or a generic Qt/OsWindow class) is not enough.
     // The class fallback needs no handle to the protected game process.
     name = L"PID " + std::to_wstring(pid) + L"; class: " + className + L"; title: " + title;
@@ -63,42 +66,16 @@ bool GameNotifications::paste(bool down) {
     return sent == 2;
 }
 bool GameNotifications::text() {
-    for (wchar_t c : current) if (c > 127) {
-        if (!clipboard.put(current)) { clipboardFailed = true; return false; }
-        return paste(true);
-    }
-    DWORD thread = GetWindowThreadProcessId(target, nullptr);
-    HKL layout = GetKeyboardLayout(thread);
-    std::vector<INPUT> input;
-    for (wchar_t c : current) {
-        SHORT mapped = c < 128 ? VkKeyScanExW(c, layout) : SHORT(-1);
-        // Use real keyboard scan codes for ASCII chat text. Unavailable keyboard
-        // layout characters can fall back to Unicode; never use Ctrl/Alt text chords.
-        if (mapped != -1 && ((mapped >> 8) & ~1) == 0) {
-            bool shift = (mapped >> 8) & 1;
-            WORD scan = WORD(MapVirtualKeyExW(mapped & 0xFF, MAPVK_VK_TO_VSC_EX, layout));
-            if (shift) input.push_back(scanInput(0x2A, true));
-            input.push_back(scanInput(scan, true)); input.push_back(scanInput(scan, false));
-            if (shift) input.push_back(scanInput(0x2A, false));
-        } else {
-            INPUT i{}; i.type = INPUT_KEYBOARD; i.ki.wScan = c; i.ki.dwFlags = KEYEVENTF_UNICODE;
-            input.push_back(i); i.ki.dwFlags |= KEYEVENTF_KEYUP; input.push_back(i);
-        }
-    }
-    UINT sent = SendInput(UINT(input.size()), input.data(), sizeof(INPUT));
-    if (sent == input.size()) return true;
-    // Release every injected key whose down was accepted before a partial send.
-    std::vector<INPUT> releases;
-    for (UINT n = 0; n < sent; ++n) if (!(input[n].ki.dwFlags & KEYEVENTF_KEYUP)) {
-        auto up = input[n]; up.ki.dwFlags |= KEYEVENTF_KEYUP; releases.push_back(up);
-    }
-    if (!releases.empty()) SendInput(UINT(releases.size()), releases.data(), sizeof(INPUT));
-    return false;
+    // Paste complete messages in every language. A scan-code batch can lose
+    // letters in a game's polling loop and is affected by Caps Lock/IME state.
+    if (!clipboard.put(current, classicUtf8)) { clipboardFailed = true; return false; }
+    return paste(true);
 }
+
 void GameNotifications::queue(HWND game, std::wstring message) {
     lastMessage = message;
     std::wstring name;
-    DWORD pid = warcraftProcess(game, name);
+    DWORD pid = warcraftProcess(game, name, classicUtf8);
     targetDescription = name;
     if (!pid) { report = L"Not sent: Warcraft was not recognized as the foreground game.\nForeground: " + name; return; }
     if (target) cancel();
@@ -150,6 +127,7 @@ void GameNotifications::tick() {
         failed = !enter(false);
         if (!failed) {
             report = L"Enter -> message -> Enter delivered to Windows.\nThe game does not expose confirmation that chat was accepted.";
+            report += classicUtf8 ? L"\nTransport: classic CF_TEXT / UTF-8 paste." : L"\nTransport: Unicode clipboard paste.";
             reset(); return;
         }
     }

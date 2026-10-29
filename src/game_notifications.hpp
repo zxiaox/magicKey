@@ -5,7 +5,7 @@
 namespace mywarkey {
 class GameNotifications {
     ClipboardText clipboard;
-    bool pasteHeld = false, clipboardFailed = false;
+    bool pasteHeld = false, clipboardFailed = false, classicUtf8 = false;
     std::wstring lastMessage;
     bool paste(bool down);
     HWND target = nullptr;

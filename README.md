@@ -26,7 +26,7 @@ When Warcraft III is the foreground application, these shortcuts send **Configur
 
 The app recognizes `War3.exe`, `Warcraft III.exe`, and `Warcraft III Reforged.exe` by executable name. Classic builds also match the exact native window classes `Warcraft III` and `WarcraftIII`, even if Windows blocks process-image queries or the executable has been renamed. Window titles alone and generic Qt/OsWindow classes do not identify the game. It never activates a background game or types into another foreground app. Messages wait up to 2.5 seconds for all keys and mouse buttons to be released; focus changes, further typing, or a timeout cancel delivery. Rapid changes replace a pending notification with the latest one. Input bypasses MagicKey's mappings, even when remapping is disabled.
 
-**Chat limitation:** no game-memory integration is used, so the app cannot reliably detect gameplay versus menus or whether chat is already open. The notification presses and holds Enter for 80 ms, releases it, waits for chat to open, types the text using regular keyboard scan codes where possible, then holds/releases Enter again to submit. Messages containing non-ASCII characters use Unicode clipboard text with Ctrl + V, avoiding Unicode keyboard packets that classic Warcraft may ignore. The clipboard formats are copied before replacement and restored afterward; a newer user copy is kept. If the clipboard cannot be safely preserved or opened, sending stops and diagnostics explains why. ASCII-only messages continue to use scan-code typing. No Escape is sent before a normal notification. Use the shortcut during gameplay with chat closed, outside an unfinished draft. If chat is already open, the opening Enter can submit that draft. Actual chat support depends on your Warcraft version, chat settings, and matching administrator privileges. The app cannot confirm that the game accepted a message. After a failed attempt, open **Settings → Notification diagnostics** to see whether game detection, shortcut release, focus, or Windows input delivery failed. It includes the last foreground window class, title, process ID, executable when readable, and numeric Windows query error. Test on your installation before relying on notifications.
+**Chat limitation:** no game-memory integration is used, so the app cannot reliably detect gameplay versus menus or whether chat is already open. The notification presses and holds Enter for 80 ms, releases it, waits for chat to open, types the text using regular keyboard scan codes where possible, then holds/releases Enter again to submit. All messages use a complete clipboard paste so keyboard layout, Caps Lock, or a rapid batch of key events cannot change individual letters. Classic `War3.exe` and classic-class fallback targets receive UTF-8 bytes in `CF_TEXT`; modern recognized Warcraft executables receive UTF-16 in `CF_UNICODETEXT`. Relying on Windows to convert Unicode to narrow clipboard text can corrupt classic Warcraft messages. The previous clipboard formats are restored afterward, unless a newer user copy took ownership. If the clipboard cannot be safely preserved or opened, sending stops with a diagnostic. No Escape is sent before a normal notification. Use the shortcut during gameplay with chat closed, outside an unfinished draft. If chat is already open, the opening Enter can submit that draft. Actual chat support depends on your Warcraft version, chat settings, and matching administrator privileges. The app cannot confirm that the game accepted a message. After a failed attempt, open **Settings → Notification diagnostics** to see whether game detection, shortcut release, focus, or Windows input delivery failed. It includes the last foreground window class, title, process ID, executable when readable, and numeric Windows query error. Test on your installation before relying on notifications.
 
 ## Themes and refreshed interface
 
@@ -42,7 +42,7 @@ Download **MagicKey-windows-x64-portable.zip** from [GitHub Releases](https://gi
 
 A release must first be published by the workflow below before the download links or in-app checks can return an executable. This source tree alone is not a published GitHub release.
 
-The app displays **MagicKey v1.6.0** in its heading. Windows file properties also contain the product name and version, generated from the single version in `CMakeLists.txt`.
+The app displays **MagicKey v1.6.1** in its heading. Windows file properties also contain the product name and version, generated from the single version in `CMakeLists.txt`.
 
 ## Build and publish (maintainers)
 
@@ -55,8 +55,8 @@ To publish a stable release:
 
    ```sh
    git push origin main
-   git tag v1.6.0
-   git push origin v1.6.0
+   git tag v1.6.1
+   git push origin v1.6.1
    ```
 
 3. Open **Actions → Build and release MagicKey**. After compilation, tests, and packaging succeed, the tag run creates a draft release with all four download assets, then publishes it as the latest stable release. A tag that differs from the compiled version fails before publication. Branch and pull-request runs never publish releases.

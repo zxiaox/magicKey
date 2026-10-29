@@ -16,9 +16,19 @@ LRESULT CALLBACK receiver(HWND window, UINT message, WPARAM w, LPARAM l) {
         if (w == VK_ESCAPE) { ++escapes; chat = false; draft.clear(); return 0; }
         if (w == 'V' && (GetKeyState(VK_CONTROL) & 0x8000) && chat) {
             if (OpenClipboard(window)) {
-                auto data = GetClipboardData(CF_UNICODETEXT);
-                auto value = data ? static_cast<const wchar_t*>(GlobalLock(data)) : nullptr;
-                if (value) { draft += value; GlobalUnlock(data); ++pastes; }
+                // Model classic Warcraft's narrow clipboard reader, rather
+                // than assuming it asks Windows for UTF-16 text.
+                auto data = GetClipboardData(CF_TEXT);
+                auto value = data ? static_cast<const char*>(GlobalLock(data)) : nullptr;
+                if (value) {
+                    int count = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value, -1, nullptr, 0);
+                    if (count > 0) {
+                        std::wstring decoded(count, L'\0');
+                        MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value, -1, decoded.data(), count);
+                        decoded.pop_back(); draft += decoded; ++pastes;
+                    }
+                    GlobalUnlock(data);
+                }
                 CloseClipboard();
             }
             return 0;
@@ -127,16 +137,28 @@ int main() {
         require(enterTimingValid, "Enter was not held long enough for a game frame");
         require(asciiPackets == 0, "English chat used Unicode packets instead of ordinary keys");
         require(notifications.diagnostics().find(L"delivered to Windows") != std::wstring::npos, "No delivery diagnostic");
-        require(pastes == 1, "Unicode profile name was not pasted");
+        require(pastes == 3, "All messages must paste complete text, including English");
         checkClipboard(game, L"original clipboard");
+        const wchar_t* expectedProfiles[]{L"Configuration 诸葛亮 enabled.", L"配置「诸葛亮」已启用。", L"設定「诸葛亮」を有効にしました。", L"설정 「诸葛亮」이 활성화되었습니다."};
+        const wchar_t* expectedEnabled[]{L"magicKey enabled.", L"magicKey 已启用。", L"magicKey を有効にしました。", L"magicKey가 활성화되었습니다."};
+        const wchar_t* expectedDisabled[]{L"magicKey disabled.", L"magicKey 已停用。", L"magicKey を無効にしました。", L"magicKey가 비활성화되었습니다."};
         for (int language = 0; language < 4; ++language) {
-            auto message = configurationMessage(L"方案 日本語 한국어", language);
-            notifications.queue(game, message); pump(notifications, 600);
-            require(submitted.back() == message, "Localized profile name/text lost");
+            notifications.queue(game, configurationMessage(L"诸葛亮", language)); pump(notifications, 600);
+            require(submitted.back() == expectedProfiles[language], "Exact localized profile message differs");
             checkClipboard(game, L"original clipboard");
-            message = toggleMessage(language % 2 == 0, language);
-            notifications.queue(game, message); pump(notifications, 600);
-            require(submitted.back() == message, "Localized toggle text lost");
+            notifications.queue(game, toggleMessage(true, language)); pump(notifications, 600);
+            require(submitted.back() == expectedEnabled[language], "Exact enabled message differs");
+            checkClipboard(game, L"original clipboard");
+            notifications.queue(game, toggleMessage(false, language)); pump(notifications, 600);
+            require(submitted.back() == expectedDisabled[language], "Exact disabled message differs");
+            checkClipboard(game, L"original clipboard");
+        }
+        // Modern clipboard readers must still receive real UTF-16 text.
+        {
+            ClipboardText modern;
+            require(modern.put(L"诸葛亮 日本語 한국어", false), "Cannot prepare modern clipboard");
+            checkClipboard(game, L"诸葛亮 日本語 한국어", false);
+            require(modern.restore(), "Modern clipboard restoration failed");
             checkClipboard(game, L"original clipboard");
         }
         // A user copy made during the paste must win over the saved snapshot.
@@ -155,7 +177,7 @@ int main() {
         require(!(GetAsyncKeyState(VK_RETURN) & 0x8000), "Cancelled Enter remained down");
         require(notifications.diagnostics().find(L"not recognized") != std::wstring::npos, "Skipped notification has no diagnostic");
         DestroyWindow(other); DestroyWindow(game);
-        std::cout << "Game notification input, timed Enter, localized clipboard text, clipboard preservation, modifiers and focus tests passed.\n";
+        std::cout << "Game notification input, timed Enter, classic UTF-8 clipboard text, exact four-language messages, clipboard preservation, modifiers and focus tests passed.\n";
         return 0;
     } catch (const std::exception& error) { alt(false); std::cerr << error.what() << '\n'; return 1; }
 }
