@@ -18,6 +18,16 @@ A portable, native Windows keyboard remapper. No installer, Python, .NET, servic
 - Release held output keys on pause, profile changes, edits, and normal exit.
 - Run minimized while remapping remains active. Closing the window stops remapping.
 
+## Profile shortcuts and Warcraft chat
+
+The first ten profiles in list order have **Alt + 1** through **Alt + 9**, then **Alt + 0**. Their shortcuts appear in the profile selector. Use top-row digits; numpad digits remain separate. Selecting a profile with its shortcut enables remapping, saves the selection, and releases previous held output keys. Renaming keeps its slot; deleting a profile shifts later slots. Profiles beyond ten remain available in the selector. AltGr (Ctrl + Alt), Shift + Alt, plain digits, and unassigned slots keep their normal behavior. Held-key repeats do not switch repeatedly.
+
+When Warcraft III is the foreground application, these shortcuts send **Configuration [profile name] enabled.**, with the actual name substituted. **Ctrl + Alt + F12** sends **magicKey enabled.** or **magicKey disabled.** Messages use the game's normal chat and its current/default audience, so other players can see them. They are not private local overlays. Notification text stays in English; profile names retain their Unicode characters.
+
+The app recognizes `War3.exe`, `Warcraft III.exe`, and `Warcraft III Reforged.exe` by executable name. It never activates a background game or types into another foreground app. Messages wait up to 2.5 seconds for all keys and mouse buttons to be released; focus changes, further typing, or a timeout cancel delivery. Rapid changes replace a pending notification with the latest one. Input bypasses MagicKey's mappings, even when remapping is disabled.
+
+**Chat limitation:** no game-memory integration is used, so the app cannot reliably detect gameplay versus menus or whether chat is already open. The notification presses Escape (which can cancel an action or discard a draft), Enter, types the text, and Enter again. Use the shortcut during gameplay, outside an unfinished chat draft. Actual chat support depends on your Warcraft version, chat settings, and matching administrator privileges. The app cannot confirm that the game accepted a message. Test on your installation before relying on notifications.
+
 ## Themes and refreshed interface
 
 Choose **Settings → Theme** in the top menu to switch instantly between **Ivory**, **Midnight**, **Arcane**, and **Warcraft III**. The Warcraft theme uses the Frozen Throne cover artwork from the user-provided Wikipedia page, with bronze borders and solid panels for readable controls. The artwork and the original keyboard-remapping app icon are embedded in the executable, so no separate files or runtime downloads are needed. Artwork attribution is included in THIRD-PARTY-NOTICES.txt.
@@ -32,7 +42,7 @@ Download **MagicKey-windows-x64-portable.zip** from [GitHub Releases](https://gi
 
 A release must first be published by the workflow below before the download links or in-app checks can return an executable. This source tree alone is not a published GitHub release.
 
-The app displays **MagicKey v1.4.0** in its heading. Windows file properties also contain the product name and version, generated from the single version in `CMakeLists.txt`.
+The app displays **MagicKey v1.5.0** in its heading. Windows file properties also contain the product name and version, generated from the single version in `CMakeLists.txt`.
 
 ## Build and publish (maintainers)
 
@@ -45,8 +55,8 @@ To publish a stable release:
 
    ```sh
    git push origin main
-   git tag v1.4.0
-   git push origin v1.4.0
+   git tag v1.5.0
+   git push origin v1.5.0
    ```
 
 3. Open **Actions → Build and release MagicKey**. After compilation, tests, and packaging succeed, the tag run creates a draft release with all four download assets, then publishes it as the latest stable release. A tag that differs from the compiled version fails before publication. Branch and pull-request runs never publish releases.

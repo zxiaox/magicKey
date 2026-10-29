@@ -3,6 +3,7 @@
 #include "../src/localization.hpp"
 #include "../src/key_capture.hpp"
 #include "../src/toggle_hotkey.hpp"
+#include "../src/profile_hotkeys.hpp"
 #include <iostream>
 #include <sstream>
 #include <utility>
@@ -30,6 +31,29 @@ int main() {
     require(press.toggle); active = !active; require(active);
     require(shortcut.event(0x7B, false, true, true, true).swallow);
     require(!shortcut.event(0x7B, true, false, false, false).swallow);
+    ProfileHotkeys profileKeys;
+    for (int i = 0; i < 10; ++i) {
+        int digit = i == 9 ? '0' : '1' + i;
+        require(profileDigit(digit) == i);
+        auto selected = profileKeys.event(digit, true, false, true, false, false, 10);
+        require(selected.swallow && selected.index == i);
+        require(profileKeys.event(digit, true, true, true, false, false, 10).index == -1);
+        // Consume key-up even after modifiers are released or profiles deleted.
+        require(profileKeys.event(digit, false, true, false, false, false, 0).swallow);
+        require(!profileKeys.event(digit, true, false, true, true, false, 10).swallow); // AltGr.
+        require(!profileKeys.event(digit, true, false, true, false, true, 10).swallow);
+        require(!profileKeys.event(digit, true, false, false, false, false, 10).swallow);
+    }
+    require(!profileKeys.event('2', true, false, true, false, false, 1).swallow);
+    require(!profileKeys.event('1', true, true, true, false, false, 10).swallow);
+    require(!profileKeys.event(0x61, true, false, true, false, false, 10).swallow); // Numpad 1.
+    require(profileShortcut(0) == L"Alt + 1" && profileShortcut(9) == L"Alt + 0" && profileShortcut(10).empty());
+    require(warcraftExecutable(L"War3.exe") && warcraftExecutable(L"Warcraft III.exe"));
+    require(warcraftExecutable(L"WARCRAFT III REFORGED.EXE"));
+    require(!warcraftExecutable(L"notepad.exe") && !warcraftExecutable(L"War3.exe.bak"));
+    require(configurationMessage(L"测试 日本語 한국어") == L"Configuration 测试 日本語 한국어 enabled.");
+    require(configurationMessage(L"a\n|b") == L"Configuration a  b enabled.");
+    require(toggleMessage(true) == L"magicKey enabled." && toggleMessage(false) == L"magicKey disabled.");
     Settings settings;
     require(settings.profiles[0].mappings == std::map<int, int>{{0x67, 'Q'}, {0x68, 'W'}, {0x65, 'R'}});
     require(settings.scanCodes && settings.language == 0);

@@ -3,16 +3,19 @@
 #include <algorithm>
 #include <iterator>
 #include <mutex>
+#include <atomic>
 #include "core.hpp"
 #include "key_output.hpp"
 #include "localization.hpp"
 #include "key_capture.hpp"
 #include "toggle_hotkey.hpp"
+#include "profile_hotkeys.hpp"
+#include "game_notifications.hpp"
 #include "updater.hpp"
 #include "theme_ui.hpp"
 
 using namespace mywarkey;
-constexpr UINT ToggleMessage = WM_APP + 1, InputError = WM_APP + 2, CapturedKey = WM_APP + 3, UpdateFinished = WM_APP + 4;
+constexpr UINT ToggleMessage = WM_APP + 1, InputError = WM_APP + 2, CapturedKey = WM_APP + 3, UpdateFinished = WM_APP + 4, ProfileSwitch = WM_APP + 5;
 enum ControlId { ProfileBox = 101, NewProfile, RenameProfile, DeleteProfile, ProfileName,
     MappingList, SourceBox, TargetBox, AddMapping, RemoveMapping, BlockWindows, Toggle, LanguageBox, ScanCodes, DisableTarget, CheckUpdates, ThemeBox, SectionProfile, SectionMappings };
 constexpr wchar_t ClassName[] = L"mywarkey.Portable.Window";
@@ -38,6 +41,10 @@ int sourceChoice = VK_NUMPAD7, targetChoice = 'Q';
 Profile liveProfile;
 bool liveEnabled = false;
 bool liveScanCodes = true;
+std::size_t liveProfileCount = 1;
+GameNotifications gameNotifications;
+std::atomic_bool notificationTyping{false}, cancelNotification{false};
+constexpr UINT_PTR NotificationTimer = 77;
 magickey::updates::Client updateClient;
 bool downloadingUpdate = false, closeAfterUpdate = false;
 
@@ -134,6 +141,7 @@ void syncEngine() {
     liveProfile = settings.profiles[settings.selected];
     liveEnabled = enabled;
     liveScanCodes = settings.scanCodes;
+    liveProfileCount = settings.profiles.size();
 }
 
 int sourceKey(const KBDLLHOOKSTRUCT& k) {
@@ -146,18 +154,22 @@ LRESULT CALLBACK keyboardProc(int code, WPARAM message, LPARAM value) {
     if (key.flags & LLKHF_INJECTED) return CallNextHookEx(nullptr, code, message, value);
     static std::array<bool, 256> physical{};
     static ToggleHotkey toggleHotkey;
+    static ProfileHotkeys profileHotkeys;
     bool down = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;
     int source = sourceKey(key);
     if (source < 1 || source > 254) return CallNextHookEx(nullptr, code, message, value);
+    if (down && notificationTyping.load()) cancelNotification = true;
     bool wasDown = physical[source];
     physical[source] = down;
     auto shortcut = toggleHotkey.event(source, down, wasDown,
         physical[VK_LCONTROL] || physical[VK_RCONTROL], physical[VK_LMENU] || physical[VK_RMENU]);
     if (shortcut.swallow) {
+        bool newEnabled = false;
         {
             std::lock_guard<std::mutex> lock(engineMutex);
             if (shortcut.toggle) {
                 liveEnabled = !liveEnabled;
+                newEnabled = liveEnabled;
                 inputFailed = false;
                 capture.cancel();
                 ++captureGeneration;
@@ -165,7 +177,21 @@ LRESULT CALLBACK keyboardProc(int code, WPARAM message, LPARAM value) {
             }
             if (!down) capture.event(source, false, wasDown);
         }
-        if (shortcut.toggle) PostMessageW(window, ToggleMessage, 0, 0);
+        if (shortcut.toggle) PostMessageW(window, ToggleMessage, newEnabled, LPARAM(GetForegroundWindow()));
+        return 1;
+    }
+    std::size_t profileCount;
+    { std::lock_guard<std::mutex> lock(engineMutex); profileCount = liveProfileCount; }
+    auto profileKey = profileHotkeys.event(source, down, wasDown,
+        physical[VK_LMENU] || physical[VK_RMENU], physical[VK_LCONTROL] || physical[VK_RCONTROL],
+        physical[VK_LSHIFT] || physical[VK_RSHIFT], profileCount);
+    if (profileKey.swallow) {
+        {
+            std::lock_guard<std::mutex> lock(engineMutex);
+            if (profileKey.index >= 0) { capture.cancel(); ++captureGeneration; engine.release(sendKey); }
+            if (!down) capture.event(source, false, wasDown);
+        }
+        if (profileKey.index >= 0) PostMessageW(window, ProfileSwitch, profileKey.index, LPARAM(GetForegroundWindow()));
         return 1;
     }
     bool swallowed;
@@ -179,7 +205,7 @@ LRESULT CALLBACK keyboardProc(int code, WPARAM message, LPARAM value) {
         if (result.swallow) return 1;
         // Keep the profile editor usable even when a profile remaps typing keys.
         swallowed = engine.event(source, down, liveProfile,
-            liveEnabled && GetForegroundWindow() != window, sendKey);
+            liveEnabled && !notificationTyping.load() && GetForegroundWindow() != window, sendKey);
     }
     return swallowed ? 1 : CallNextHookEx(nullptr, code, message, value);
 }
@@ -321,8 +347,9 @@ void refresh() {
     column.pszText = const_cast<wchar_t*>(tr(L"Send instead"));
     ListView_SetColumn(mappingList, 1, &column);
     SendMessageW(profileBox, CB_RESETCONTENT, 0, 0);
-    for (const auto& p : settings.profiles) {
-        auto label = wide(p.name);
+    for (std::size_t i = 0; i < settings.profiles.size(); ++i) {
+        auto label = wide(settings.profiles[i].name);
+        if (i < 10) label += L"  [" + profileShortcut(i) + L"]";
         SendMessageW(profileBox, CB_ADDSTRING, 0, LPARAM(label.c_str()));
     }
     SendMessageW(profileBox, CB_SETCURSEL, settings.selected, 0);
@@ -464,7 +491,7 @@ void command(int id, int notification) {
 }
 LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
     switch (message) {
-        case WM_CREATE: window = hwnd; makeInterface(); return 0;
+        case WM_CREATE: window = hwnd; makeInterface(); SetTimer(hwnd, NotificationTimer, 25, nullptr); return 0;
         case WM_ERASEBKGND: return 1;
         case WM_PAINT: {
             PAINTSTRUCT paint;
@@ -549,7 +576,31 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
             return 0;
         case ToggleMessage:
             { std::lock_guard<std::mutex> lock(engineMutex); enabled = liveEnabled; }
+            gameNotifications.queue(reinterpret_cast<HWND>(l), toggleMessage(w != 0));
+            cancelNotification = false; notificationTyping = gameNotifications.typing();
             refresh(); return 0;
+        case ProfileSwitch: {
+            if (w >= settings.profiles.size() || w >= 10) return 0;
+            auto candidate = settings; candidate.selected = std::size_t(w);
+            if (commit(std::move(candidate))) {
+                enabled = true; syncEngine(); refresh();
+                gameNotifications.queue(reinterpret_cast<HWND>(l), configurationMessage(wide(settings.profiles[settings.selected].name)));
+                cancelNotification = false; notificationTyping = gameNotifications.typing();
+            }
+            return 0;
+        }
+        case WM_TIMER:
+            if (w == NotificationTimer) {
+                if (cancelNotification.exchange(false)) gameNotifications.cancel();
+                if (gameNotifications.readyToStart()) {
+                    notificationTyping = true;
+                    std::lock_guard<std::mutex> lock(engineMutex);
+                    engine.release(sendKey);
+                }
+                gameNotifications.tick();
+                notificationTyping = gameNotifications.typing();
+            }
+            return 0;
         case InputError:
             enabled = false; syncEngine(); refresh();
             error(L"Windows could not send a remapped key. Remapping is paused. If the target app runs as administrator, run MagicKey at the same privilege level.");
@@ -576,6 +627,7 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
             } else DestroyWindow(hwnd);
             return 0;
         case WM_DESTROY:
+            KillTimer(hwnd, NotificationTimer); gameNotifications.cancel(); notificationTyping = false;
             cancelCapture();
             enabled = false; syncEngine();
             if (hookThreadId) PostThreadMessageW(hookThreadId, WM_QUIT, 0, 0);
@@ -616,6 +668,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     }
     liveProfile = settings.profiles[settings.selected];
     liveScanCodes = settings.scanCodes;
+    liveProfileCount = settings.profiles.size();
     bool invalidTheme = false;
     themePath = std::filesystem::path(executable).parent_path() / L"MagicKey.theme";
     auto theme = magickey::ThemeId::Ivory;

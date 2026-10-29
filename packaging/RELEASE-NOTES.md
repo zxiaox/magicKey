@@ -2,12 +2,12 @@ Portable MagicKey for Windows 10/11 x64. End users do not need Visual Studio or 
 
 New in this version:
 
-- Original app icon showing two keyboard buttons and remapping arrows, visible in Explorer, the title bar, task switching, and the app header.
-- Language, theme, and update checks now live in the top **Settings** menu, with checked selections and all four interface languages.
-- Remapping starts **enabled** with your selected profile on every launch, including after updating. **Ctrl + Alt + F12** toggles enabled/paused from any application, once per key press. The main button also pauses or resumes remapping.
-- The **Warcraft III** theme includes the Frozen Throne cover artwork from the supplied Wikipedia page, embedded in the EXE for offline use. Solid panels keep controls readable.
+- **Alt + 1 … Alt + 9, Alt + 0** select and enable the first ten profiles in list order. Shortcuts appear beside profile names. Top-row digits are distinct from the numpad; repeats are consumed once per press.
+- When Warcraft III is foreground, profile shortcuts send **Configuration [profile name] enabled.** in normal game chat.
+- **Ctrl + Alt + F12** also sends **magicKey enabled.** or **magicKey disabled.** while Warcraft is foreground.
+- Chat notifications wait for shortcut release, support Unicode names, bypass mappings, and cancel on focus changes. A pending notification is replaced by the newest status.
 
-Existing profile mappings and theme preferences are preserved.
+Notifications use the current/default chat audience and can be seen by other players. They reset chat with Escape first, which can discard a draft or cancel an action. Use during gameplay; game-specific acceptance still needs verification on your installation. Existing profiles and themes are preserved.
 
 Download **MagicKey-windows-x64-portable.zip**, extract it into a writable folder, and run **MagicKey.exe**. The executable is also available separately for existing installations and the in-app updater. The source-code archives are intended for developers.
 

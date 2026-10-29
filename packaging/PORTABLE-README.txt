@@ -40,3 +40,15 @@ Third-party software notices are included in THIRD-PARTY-NOTICES.txt.
 
 Language is available under Settings > Language. Ctrl + Alt + F12 toggles
 remapping on/off at any time. The Warcraft artwork and app icon are built into the EXE.
+
+PROFILE SHORTCUTS AND GAME CHAT
+Alt + top-row 1..9, then 0 selects and enables profiles 1..10 in list order.
+Their shortcuts appear in the profile list. Numpad digits are unchanged.
+When Warcraft III is foreground, these shortcuts send:
+Configuration [actual profile name] enabled.
+Ctrl + Alt + F12 sends magicKey enabled. / magicKey disabled.
+These are normal chat messages visible to the current/default audience.
+Wait for all keys to be released. Sending starts with Escape, which can discard
+an existing chat draft or cancel an action. Use during gameplay outside chat.
+Background games and other apps never receive these messages. Actual game
+compatibility depends on your Warcraft version, settings and privileges.
