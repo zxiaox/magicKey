@@ -21,7 +21,7 @@ public:
     ThemeId theme() const { return selected; }
     const Palette& colors() const { return palette(selected); }
     HFONT body() const { return bodyFont; }
-    HFONT small() const { return smallFont; }
+    HFONT smallTextFont() const { return smallFont; }
     HBRUSH background() const { return backgroundBrush; }
     HBRUSH input() const { return inputBrush; }
     HBRUSH staticBackground(HWND child, HWND root) const;

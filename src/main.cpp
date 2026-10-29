@@ -219,7 +219,7 @@ HWND control(const wchar_t* type, const wchar_t* label, DWORD style, int id, int
     if (std::wstring_view(type) == WC_COMBOBOXW) style |= CBS_OWNERDRAWFIXED | CBS_HASSTRINGS;
     HWND child = CreateWindowExW(0, type, tr(label), WS_CHILD | WS_VISIBLE | style,
         x, y, w, h, window, reinterpret_cast<HMENU>(INT_PTR(id)), GetModuleHandleW(nullptr), nullptr);
-    SendMessageW(child, WM_SETFONT, WPARAM(std::wstring_view(type) == L"STATIC" ? themeUI.small() : font), TRUE);
+    SendMessageW(child, WM_SETFONT, WPARAM(std::wstring_view(type) == L"STATIC" ? themeUI.smallTextFont() : font), TRUE);
     if (std::wstring_view(type) == WC_COMBOBOXW) themeUI.prepareCombo(child);
     if (*label && (std::wstring_view(type) == L"STATIC" || std::wstring_view(type) == L"BUTTON"))
         localizedControls.emplace_back(child, label);
@@ -633,7 +633,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW); wc.hIcon = LoadIconW(instance, MAKEINTRESOURCEW(101));
     wc.hbrBackground = nullptr;
     RegisterClassW(&wc);
-    RECT bounds{0, 0, 900, 680};
+    RECT bounds{0, 0, 900, 668};
     DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN;
     AdjustWindowRect(&bounds, style, TRUE);
     window = CreateWindowExW(WS_EX_CONTROLPARENT, ClassName, L"MagicKey", style, CW_USEDEFAULT, CW_USEDEFAULT,
