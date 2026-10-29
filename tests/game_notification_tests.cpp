@@ -1,17 +1,28 @@
 #include "../src/game_notifications.hpp"
+#include "../src/profile_hotkeys.hpp"
+#include <cstring>
 #include <iostream>
 #include <vector>
 #include <stdexcept>
 using namespace mywarkey;
 bool chat = false, packet = false, enterTimingValid = true;
 ULONGLONG enterDown = 0;
-int escapes = 0, asciiPackets = 0;
+int escapes = 0, asciiPackets = 0, pastes = 0;
 std::wstring draft;
 std::vector<std::wstring> submitted;
 LRESULT CALLBACK receiver(HWND window, UINT message, WPARAM w, LPARAM l) {
     if (message == WM_KEYDOWN) {
         packet = w == VK_PACKET;
         if (w == VK_ESCAPE) { ++escapes; chat = false; draft.clear(); return 0; }
+        if (w == 'V' && (GetKeyState(VK_CONTROL) & 0x8000) && chat) {
+            if (OpenClipboard(window)) {
+                auto data = GetClipboardData(CF_UNICODETEXT);
+                auto value = data ? static_cast<const wchar_t*>(GlobalLock(data)) : nullptr;
+                if (value) { draft += value; GlobalUnlock(data); ++pastes; }
+                CloseClipboard();
+            }
+            return 0;
+        }
         if (w == VK_RETURN) enterDown = GetTickCount64();
     }
     // Model a game's frame-based Enter handling: instantaneous down/up pairs
@@ -43,6 +54,35 @@ void alt(bool down) {
     if (!down) input.ki.dwFlags = KEYEVENTF_KEYUP;
     require(SendInput(1, &input, sizeof(input)) == 1, "Cannot send test modifier");
 }
+void clipboardText(HWND window, const std::wstring& text, bool custom = true) {
+    require(OpenClipboard(window), "Cannot seed test clipboard");
+    EmptyClipboard();
+    auto data = GlobalAlloc(GMEM_MOVEABLE, (text.size()+1)*sizeof(wchar_t));
+    auto value = GlobalLock(data); std::memcpy(value, text.c_str(), (text.size()+1)*sizeof(wchar_t)); GlobalUnlock(data);
+    require(SetClipboardData(CF_UNICODETEXT, data) != nullptr, "Cannot set clipboard text");
+    if (custom) {
+        auto binary = GlobalAlloc(GMEM_MOVEABLE, 8); auto bytes = GlobalLock(binary);
+        std::memcpy(bytes, "KEEP123", 8); GlobalUnlock(binary);
+        require(SetClipboardData(RegisterClipboardFormatW(L"MagicKey.Test.Binary"), binary) != nullptr, "Cannot set custom clipboard format");
+    }
+    CloseClipboard();
+}
+void checkClipboard(HWND window, const std::wstring& expected, bool custom = true) {
+    require(OpenClipboard(window), "Cannot inspect restored clipboard");
+    auto data = GetClipboardData(CF_UNICODETEXT);
+    auto value = data ? static_cast<const wchar_t*>(GlobalLock(data)) : nullptr;
+    bool correct = value && expected == value;
+    if (value) GlobalUnlock(data);
+    bool binaryCorrect = true;
+    if (custom) {
+        auto binary = GetClipboardData(RegisterClipboardFormatW(L"MagicKey.Test.Binary"));
+        auto bytes = binary ? GlobalLock(binary) : nullptr;
+        binaryCorrect = bytes && std::memcmp(bytes, "KEEP123", 8) == 0;
+        if (bytes) GlobalUnlock(binary);
+    }
+    CloseClipboard();
+    require(correct && binaryCorrect, "Clipboard text or custom format was not preserved");
+}
 int main() {
     try {
         WNDCLASSW wc{}; wc.lpfnWndProc = receiver;
@@ -68,6 +108,7 @@ int main() {
         require(!notifications.readyToStart() && notifications.diagnostics().find(L"not recognized") != std::wstring::npos, "Title-only window was recognized");
         DestroyWindow(spoofTitle); SetForegroundWindow(game); pump(notifications, 100);
 #endif
+        clipboardText(game, L"original clipboard");
         alt(true); pump(notifications, 50);
         notifications.queue(game, L"Configuration 测试 日本語 한국어 enabled.");
 #ifdef MAGICKEY_WINDOW_FALLBACK_TEST
@@ -85,18 +126,35 @@ int main() {
         require(enterTimingValid, "Enter was not held long enough for a game frame");
         require(asciiPackets == 0, "English chat used Unicode packets instead of ordinary keys");
         require(notifications.diagnostics().find(L"delivered to Windows") != std::wstring::npos, "No delivery diagnostic");
+        require(pastes == 1, "Unicode profile name was not pasted");
+        checkClipboard(game, L"original clipboard");
+        for (int language = 0; language < 4; ++language) {
+            auto message = configurationMessage(L"方案 日本語 한국어", language);
+            notifications.queue(game, message); pump(notifications, 600);
+            require(submitted.back() == message, "Localized profile name/text lost");
+            checkClipboard(game, L"original clipboard");
+            message = toggleMessage(language % 2 == 0, language);
+            notifications.queue(game, message); pump(notifications, 600);
+            require(submitted.back() == message, "Localized toggle text lost");
+            checkClipboard(game, L"original clipboard");
+        }
+        // A user copy made during the paste must win over the saved snapshot.
+        notifications.queue(game, configurationMessage(L"新方案", 1));
+        pump(notifications, 160); clipboardText(game, L"new user copy", false);
+        pump(notifications, 600); checkClipboard(game, L"new user copy", false);
+        std::size_t countBeforeFocusLoss = submitted.size();
         // Different foreground HWND in the same process still cancels delivery.
         HWND other = CreateWindowW(wc.lpszClassName, L"Other app receiver", WS_OVERLAPPEDWINDOW, 150,150,500,250,nullptr,nullptr,wc.hInstance,nullptr);
         notifications.queue(game, L"must not be sent");
         pump(notifications, 20); // Interrupt while our opening Enter is held.
         ShowWindow(other, SW_SHOW); SetForegroundWindow(other); pump(notifications, 900);
-        require(submitted.size() == 3, "Message leaked after focus changed");
+        require(submitted.size() == countBeforeFocusLoss, "Message leaked after focus changed");
         notifications.queue(game, L"background must not send"); pump(notifications, 500);
-        require(submitted.size() == 3, "Background target accepted");
+        require(submitted.size() == countBeforeFocusLoss, "Background target accepted");
         require(!(GetAsyncKeyState(VK_RETURN) & 0x8000), "Cancelled Enter remained down");
         require(notifications.diagnostics().find(L"not recognized") != std::wstring::npos, "Skipped notification has no diagnostic");
         DestroyWindow(other); DestroyWindow(game);
-        std::cout << "Game notification input, timed Enter, scan-code text, Unicode, modifiers and focus tests passed.\n";
+        std::cout << "Game notification input, timed Enter, localized clipboard text, clipboard preservation, modifiers and focus tests passed.\n";
         return 0;
     } catch (const std::exception& error) { alt(false); std::cerr << error.what() << '\n'; return 1; }
 }

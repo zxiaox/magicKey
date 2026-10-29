@@ -582,7 +582,7 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
             enabled = !enabled;
             { std::lock_guard<std::mutex> lock(engineMutex); inputFailed = false; }
             syncEngine();
-            gameNotifications.queue(reinterpret_cast<HWND>(l), toggleMessage(enabled));
+            gameNotifications.queue(reinterpret_cast<HWND>(l), toggleMessage(enabled, settings.language));
             cancelNotification = false; notificationTyping = gameNotifications.typing();
             refresh(); return 0;
         case ProfileSwitch: {
@@ -590,7 +590,7 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
             auto candidate = settings; candidate.selected = std::size_t(w);
             if (commit(std::move(candidate))) {
                 enabled = true; syncEngine(); refresh();
-                gameNotifications.queue(reinterpret_cast<HWND>(l), configurationMessage(wide(settings.profiles[settings.selected].name)));
+                gameNotifications.queue(reinterpret_cast<HWND>(l), configurationMessage(wide(settings.profiles[settings.selected].name), settings.language));
                 cancelNotification = false; notificationTyping = gameNotifications.typing();
             }
             return 0;

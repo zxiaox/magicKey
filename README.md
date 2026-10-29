@@ -22,11 +22,11 @@ A portable, native Windows keyboard remapper. No installer, Python, .NET, servic
 
 The first ten profiles in list order have **Alt + 1** through **Alt + 9**, then **Alt + 0**. Their shortcuts appear in the profile selector. Use top-row digits; numpad digits remain separate. Selecting a profile with its shortcut enables remapping, saves the selection, and releases previous held output keys. Renaming keeps its slot; deleting a profile shifts later slots. Profiles beyond ten remain available in the selector. AltGr (Ctrl + Alt), Shift + Alt, plain digits, and unassigned slots keep their normal behavior. Held-key repeats do not switch repeatedly.
 
-When Warcraft III is the foreground application, these shortcuts send **Configuration [profile name] enabled.**, with the actual name substituted. **Ctrl + Alt + F12** sends **magicKey enabled.** or **magicKey disabled.** Messages use the game's normal chat and its current/default audience, so other players can see them. They are not private local overlays. Notification text stays in English; profile names retain their Unicode characters.
+When Warcraft III is the foreground application, these shortcuts send **Configuration [profile name] enabled.**, with the actual name substituted. **Ctrl + Alt + F12** sends **magicKey enabled.** or **magicKey disabled.** Messages use the game's normal chat and its current/default audience, so other players can see them. They are not private local overlays. Notification text follows the software language: English, Simplified Chinese, Japanese, or Korean. Profile names retain their original characters.
 
 The app recognizes `War3.exe`, `Warcraft III.exe`, and `Warcraft III Reforged.exe` by executable name. Classic builds also match the exact native window classes `Warcraft III` and `WarcraftIII`, even if Windows blocks process-image queries or the executable has been renamed. Window titles alone and generic Qt/OsWindow classes do not identify the game. It never activates a background game or types into another foreground app. Messages wait up to 2.5 seconds for all keys and mouse buttons to be released; focus changes, further typing, or a timeout cancel delivery. Rapid changes replace a pending notification with the latest one. Input bypasses MagicKey's mappings, even when remapping is disabled.
 
-**Chat limitation:** no game-memory integration is used, so the app cannot reliably detect gameplay versus menus or whether chat is already open. The notification presses and holds Enter for 80 ms, releases it, waits for chat to open, types the text using regular keyboard scan codes where possible, then holds/releases Enter again to submit. Non-Latin profile names use Unicode fallback. No Escape is sent before a normal notification. Use the shortcut during gameplay with chat closed, outside an unfinished draft. If chat is already open, the opening Enter can submit that draft. Actual chat support depends on your Warcraft version, chat settings, and matching administrator privileges. The app cannot confirm that the game accepted a message. After a failed attempt, open **Settings → Notification diagnostics** to see whether game detection, shortcut release, focus, or Windows input delivery failed. It includes the last foreground window class, title, process ID, executable when readable, and numeric Windows query error. Test on your installation before relying on notifications.
+**Chat limitation:** no game-memory integration is used, so the app cannot reliably detect gameplay versus menus or whether chat is already open. The notification presses and holds Enter for 80 ms, releases it, waits for chat to open, types the text using regular keyboard scan codes where possible, then holds/releases Enter again to submit. Messages containing non-ASCII characters use Unicode clipboard text with Ctrl + V, avoiding Unicode keyboard packets that classic Warcraft may ignore. The clipboard formats are copied before replacement and restored afterward; a newer user copy is kept. If the clipboard cannot be safely preserved or opened, sending stops and diagnostics explains why. ASCII-only messages continue to use scan-code typing. No Escape is sent before a normal notification. Use the shortcut during gameplay with chat closed, outside an unfinished draft. If chat is already open, the opening Enter can submit that draft. Actual chat support depends on your Warcraft version, chat settings, and matching administrator privileges. The app cannot confirm that the game accepted a message. After a failed attempt, open **Settings → Notification diagnostics** to see whether game detection, shortcut release, focus, or Windows input delivery failed. It includes the last foreground window class, title, process ID, executable when readable, and numeric Windows query error. Test on your installation before relying on notifications.
 
 ## Themes and refreshed interface
 
@@ -42,7 +42,7 @@ Download **MagicKey-windows-x64-portable.zip** from [GitHub Releases](https://gi
 
 A release must first be published by the workflow below before the download links or in-app checks can return an executable. This source tree alone is not a published GitHub release.
 
-The app displays **MagicKey v1.5.3** in its heading. Windows file properties also contain the product name and version, generated from the single version in `CMakeLists.txt`.
+The app displays **MagicKey v1.6.0** in its heading. Windows file properties also contain the product name and version, generated from the single version in `CMakeLists.txt`.
 
 ## Build and publish (maintainers)
 
@@ -55,8 +55,8 @@ To publish a stable release:
 
    ```sh
    git push origin main
-   git tag v1.5.3
-   git push origin v1.5.3
+   git tag v1.6.0
+   git push origin v1.6.0
    ```
 
 3. Open **Actions → Build and release MagicKey**. After compilation, tests, and packaging succeed, the tag run creates a draft release with all four download assets, then publishes it as the latest stable release. A tag that differs from the compiled version fails before publication. Branch and pull-request runs never publish releases.
@@ -157,3 +157,5 @@ Updater tests additionally cover strict numeric versions, malformed release meta
 Theme tests cover all four preference values, malformed appearance files, and text contrast. Windows UI tests switch each theme through its real menu, restart the app, verify startup is enabled, pause/resume works, saved menu selections persist, the app icon is present, and the background artwork renders, ensure profiles remain byte-identical, and capture screenshots for all four language/theme combinations.
 
 Taskbar identity: MagicKey sets explicit large/small window icons and the stable `zxiaox.MagicKey` AppUserModelID. Taskbar group/pinning properties point to the embedded icon and the current portable executable. These are restored after Explorer restarts. If an older pinned shortcut still shows a cached icon, unpin it, launch the updated MagicKey.exe, and pin the running app again. No system icon-cache deletion is required.
+
+Notification speed: Enter remains held for 80 ms; chat-open and text-settle waits are now 50 ms each instead of 300/250 ms. Multilingual paste adds a 50 ms Ctrl+V hold. With the UI timer, typical sequences take roughly 0.3–0.4 seconds after shortcut release. Actual game timing can differ. Diagnostics includes the exact intended message, helping distinguish name retrieval from text-input/display failures. Clipboard tools/history managers may observe the temporary notification text.

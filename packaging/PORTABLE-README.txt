@@ -50,7 +50,10 @@ Ctrl + Alt + F12 sends magicKey enabled. / magicKey disabled.
 These are normal chat messages visible to the current/default audience.
 Wait for all keys to be released. Sending follows Enter -> message -> Enter, with timed Enter presses.
 Use during gameplay with chat closed; an open draft may otherwise be submitted.
-English text uses normal keys; non-Latin names use Unicode fallback.
+ASCII-only text uses normal keys. Multilingual messages paste Unicode text
+using Ctrl+V, preserving clipboard formats where safe and respecting newer
+user copies. Messages follow the software language. Clipboard history tools
+may observe temporary notification text.
 If no message appears, open Settings > Notification diagnostics after trying.
 Background games and other apps never receive these messages. Actual game
 compatibility depends on your Warcraft version, settings and privileges.

@@ -4,6 +4,9 @@
 namespace mywarkey {
 struct Translation { const wchar_t *en, *zh, *ja, *ko; };
 inline constexpr Translation translations[] = {
+    {L"Configuration {name} enabled.", L"配置「{name}」已启用。", L"設定「{name}」を有効にしました。", L"설정 「{name}」이 활성화되었습니다."},
+    {L"magicKey enabled.", L"magicKey 已启用。", L"magicKey を有効にしました。", L"magicKey가 활성화되었습니다."},
+    {L"magicKey disabled.", L"magicKey 已停用。", L"magicKey を無効にしました。", L"magicKey가 비활성화되었습니다."},
     {L"Notification diagnostics", L"通知诊断", L"通知の診断", L"알림 진단"},
     {L"Toggle remapping", L"切换改键状态", L"リマップの切り替え", L"키 매핑 전환"},
     {L"Settings", L"设置", L"設定", L"설정"},

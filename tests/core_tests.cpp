@@ -57,6 +57,12 @@ int main() {
     require(!warcraftWindowClass(L"Qt5QWindowIcon") && !warcraftWindowClass(L"Warcraft III Launcher"));
     require(configurationMessage(L"测试 日本語 한국어") == L"Configuration 测试 日本語 한국어 enabled.");
     require(configurationMessage(L"a\n|b") == L"Configuration a  b enabled.");
+    require(configurationMessage(L"中文方案", 1) == L"配置「中文方案」已启用。");
+    require(configurationMessage(L"日本語", 2) == L"設定「日本語」を有効にしました。");
+    require(configurationMessage(L"한국어", 3) == L"설정 「한국어」이 활성화되었습니다.");
+    require(toggleMessage(true, 1) == L"magicKey 已启用。" && toggleMessage(false, 1) == L"magicKey 已停用。");
+    require(toggleMessage(true, 2) == L"magicKey を有効にしました。" && toggleMessage(false, 2) == L"magicKey を無効にしました。");
+    require(toggleMessage(true, 3) == L"magicKey가 활성화되었습니다." && toggleMessage(false, 3) == L"magicKey가 비활성화되었습니다.");
     require(toggleMessage(true) == L"magicKey enabled." && toggleMessage(false) == L"magicKey disabled.");
     Settings settings;
     require(settings.profiles[0].mappings == std::map<int, int>{{0x67, 'Q'}, {0x68, 'W'}, {0x65, 'R'}});

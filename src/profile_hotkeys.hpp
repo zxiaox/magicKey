@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <string>
 #include <string_view>
+#include "localization.hpp"
 namespace mywarkey {
 inline int profileDigit(int key) {
     return key == '0' ? 9 : key >= '1' && key <= '9' ? key - '1' : -1;
@@ -40,10 +41,13 @@ inline bool warcraftWindowClass(std::wstring_view name) {
     for (auto& c : lower) if (c >= L'A' && c <= L'Z') c += L'a' - L'A';
     return lower == L"warcraft iii" || lower == L"warcraftiii";
 }
-inline std::wstring configurationMessage(std::wstring name) {
+inline std::wstring configurationMessage(std::wstring name, int language = 0) {
     if (name.size() > 80) name.resize(80);
     for (auto& c : name) if (c < 32 || c == L'|' || c == 127) c = L' ';
-    return L"Configuration " + name + L" enabled.";
+    std::wstring message = translate(L"Configuration {name} enabled.", language);
+    auto position = message.find(L"{name}");
+    if (position != std::wstring::npos) message.replace(position, 6, name);
+    return message;
 }
-inline std::wstring toggleMessage(bool enabled) { return enabled ? L"magicKey enabled." : L"magicKey disabled."; }
+inline std::wstring toggleMessage(bool enabled, int language = 0) { return translate(enabled ? L"magicKey enabled." : L"magicKey disabled.", language); }
 }

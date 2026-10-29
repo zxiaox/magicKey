@@ -1,8 +1,13 @@
 #pragma once
 #include <windows.h>
 #include <string>
+#include "clipboard_text.hpp"
 namespace mywarkey {
 class GameNotifications {
+    ClipboardText clipboard;
+    bool pasteHeld = false, clipboardFailed = false;
+    std::wstring lastMessage;
+    bool paste(bool down);
     HWND target = nullptr;
     DWORD process = 0;
     std::wstring pending, current, targetDescription;
@@ -19,7 +24,7 @@ public:
     void queue(HWND game, std::wstring message);
     void tick();
     void cancel();
-    std::wstring diagnostics() const { return report + (targetDescription.empty() ? L"" : L"\n\nLast foreground: " + targetDescription); }
+    std::wstring diagnostics() const { return report + (targetDescription.empty() ? L"" : L"\n\nLast foreground: " + targetDescription) + (lastMessage.empty() ? L"" : L"\n\nMessage text: " + lastMessage); }
     bool readyToStart() const { return stage == 0 && !pending.empty() && sameTarget() && idle(); }
     bool typing() const { return stage != 0; }
 };

@@ -1,10 +1,13 @@
 Portable MagicKey for Windows 10/11 x64. End users do not need Visual Studio or an installer.
 
-New in this version: fixed classic Warcraft detection when Windows blocks reading the foreground process name or a launcher uses a renamed executable. MagicKey can now recognize the exact classic Warcraft window classes **Warcraft III** and **WarcraftIII** without opening the process. A matching window title alone is insufficient.
+New in this version:
 
-**Settings → Notification diagnostics** now includes the last foreground window class, title, process ID, readable executable name, and numeric Windows query error. Query failure is no longer reported as an assumed administrator mismatch. Actual Windows input restrictions remain separate from game recognition.
+- Notifications now follow the selected interface language: English, Simplified Chinese, Japanese, or Korean.
+- Non-ASCII profile names and localized messages use Unicode clipboard paste, addressing classic Warcraft dropping Unicode key events. Existing clipboard formats are preserved when they can be safely copied; a newer user copy is never overwritten. If preservation fails, the notification stops with a diagnostic.
+- Removed the long 300/250 ms waits. Chat-open/text-settle waits are now 50/50 ms, retaining 80 ms Enter holds for reliability. Typical sequences take about 0.3–0.4 seconds after shortcut release.
+- Diagnostics includes the exact intended message text for checking the selected profile name.
 
-The Enter → message → Enter sequence, timed presses, profiles, themes, and shortcuts are preserved. Use notification shortcuts during gameplay with chat closed.
+Use notification shortcuts during gameplay with chat closed. Multilingual messages temporarily use the clipboard; clipboard history tools may observe that text. Actual game behavior still requires testing in your Warcraft installation. Profiles, themes and shortcuts are preserved.
 
 Download **MagicKey-windows-x64-portable.zip**, extract it into a writable folder, and run **MagicKey.exe**. The executable is also available separately for existing installations and the in-app updater. The source-code archives are intended for developers.
 

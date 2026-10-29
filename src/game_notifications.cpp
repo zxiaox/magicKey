@@ -54,7 +54,16 @@ bool GameNotifications::enter(bool down) {
     enterHeld = down;
     return true;
 }
+bool GameNotifications::paste(bool down) {
+    INPUT input[]{scanInput(down ? 0x1D : 0x2F, down), scanInput(down ? 0x2F : 0x1D, down)};
+    pasteHeld = down;
+    return SendInput(2, input, sizeof(INPUT)) == 2;
+}
 bool GameNotifications::text() {
+    for (wchar_t c : current) if (c > 127) {
+        if (!clipboard.put(current)) { clipboardFailed = true; return false; }
+        return paste(true);
+    }
     DWORD thread = GetWindowThreadProcessId(target, nullptr);
     HKL layout = GetKeyboardLayout(thread);
     std::vector<INPUT> input;
@@ -84,6 +93,7 @@ bool GameNotifications::text() {
     return false;
 }
 void GameNotifications::queue(HWND game, std::wstring message) {
+    lastMessage = message;
     std::wstring name;
     DWORD pid = warcraftProcess(game, name);
     targetDescription = name;
@@ -96,10 +106,13 @@ void GameNotifications::queue(HWND game, std::wstring message) {
 void GameNotifications::reset() {
     // Always pair an injected Enter, including after focus loss/cancellation.
     if (enterHeld) enter(false);
+    if (pasteHeld) paste(false);
+    clipboard.restore();
     enterHeld = false; promptOpened = false;
     stage = 0; pending.clear(); current.clear(); target = nullptr; process = 0;
 }
 void GameNotifications::cancel() {
+    if (pasteHeld) paste(false);
     if (enterHeld) enter(false);
     if (promptOpened && sameTarget() && idle()) {
         INPUT escape[]{scanInput(0x01, true), scanInput(0x01, false)};
@@ -109,7 +122,7 @@ void GameNotifications::cancel() {
     reset();
 }
 void GameNotifications::tick() {
-    if (!target) return;
+    if (!target) { clipboard.restore(); return; }
     if (!sameTarget()) { cancel(); report = L"Not sent: foreground window changed."; return; }
     auto now = GetTickCount64();
     if (now > deadline) { cancel(); report = L"Not sent: shortcut release/input sequence timed out."; return; }
@@ -118,14 +131,16 @@ void GameNotifications::tick() {
     bool failed = false;
     if (stage == 0) {
         if (pending.empty() || !idle()) return;
-        current = std::move(pending); pending.clear();
+        current = std::move(pending); pending.clear(); clipboardFailed = false;
         failed = !enter(true); // Enter -> text -> Enter. No opening Escape.
         stage = 1; next = now + 80; deadline = now + 5000;
     } else if (now >= next && stage == 1) {
         failed = !enter(false); promptOpened = true;
-        stage = 2; next = now + 300;
+        stage = 2; next = now + 50;
     } else if (now >= next && stage == 2) {
-        failed = !text(); stage = 3; next = now + 250;
+        failed = !text(); stage = pasteHeld ? 5 : 3; next = now + 50;
+    } else if (now >= next && stage == 5) {
+        failed = !paste(false); stage = 3; next = now + 50;
     } else if (now >= next && stage == 3) {
         failed = !enter(true); stage = 4; next = now + 80;
     } else if (now >= next && stage == 4) {
@@ -135,6 +150,6 @@ void GameNotifications::tick() {
             reset(); return;
         }
     }
-    if (failed) { cancel(); report = L"Windows blocked or incompletely accepted the input. Run MagicKey at the same administrator privilege level as Warcraft."; }
+    if (failed) { bool failedClipboard = clipboardFailed; cancel(); if (failedClipboard) { report = L"Not sent: the clipboard could not be safely preserved or opened. Try again after closing clipboard tools."; return; } report = L"Windows blocked or incompletely accepted the input. Run MagicKey at the same administrator privilege level as Warcraft."; }
 }
 }
