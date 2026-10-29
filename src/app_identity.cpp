@@ -1,14 +1,15 @@
 #include "app_identity.hpp"
 #include <shobjidl.h>
+#include <shellapi.h>
 #include <propkey.h>
 #include <propvarutil.h>
 #include <string>
 #include <iterator>
 namespace magickey {
-HICON appIcon(bool small) {
+HICON appIcon(bool compactIcon) {
     return static_cast<HICON>(LoadImageW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(101), IMAGE_ICON,
-        GetSystemMetrics(small ? SM_CXSMICON : SM_CXICON),
-        GetSystemMetrics(small ? SM_CYSMICON : SM_CYICON), LR_SHARED));
+        GetSystemMetrics(compactIcon ? SM_CXSMICON : SM_CXICON),
+        GetSystemMetrics(compactIcon ? SM_CYSMICON : SM_CYICON), LR_SHARED));
 }
 void initializeAppIdentity() {
     // Stable across portable updates, file moves and version numbers.

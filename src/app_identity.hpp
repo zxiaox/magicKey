@@ -4,5 +4,5 @@ namespace magickey {
 inline constexpr wchar_t AppUserModelId[] = L"zxiaox.MagicKey";
 void initializeAppIdentity();
 void setWindowIdentity(HWND window);
-HICON appIcon(bool small);
+HICON appIcon(bool compactIcon);
 }
