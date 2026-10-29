@@ -56,8 +56,11 @@ bool GameNotifications::enter(bool down) {
 }
 bool GameNotifications::paste(bool down) {
     INPUT input[]{scanInput(down ? 0x1D : 0x2F, down), scanInput(down ? 0x2F : 0x1D, down)};
-    pasteHeld = down;
-    return SendInput(2, input, sizeof(INPUT)) == 2;
+    UINT sent = SendInput(2, input, sizeof(INPUT));
+    // Keep cleanup armed if a Ctrl/V release was only partially accepted.
+    if (down) pasteHeld = sent != 0;
+    else pasteHeld = sent != 2;
+    return sent == 2;
 }
 bool GameNotifications::text() {
     for (wchar_t c : current) if (c > 127) {
@@ -69,8 +72,8 @@ bool GameNotifications::text() {
     std::vector<INPUT> input;
     for (wchar_t c : current) {
         SHORT mapped = c < 128 ? VkKeyScanExW(c, layout) : SHORT(-1);
-        // Use real keyboard scan codes for ordinary chat text. Unicode remains
-        // a fallback for non-Latin profile names; never use Ctrl/Alt text chords.
+        // Use real keyboard scan codes for ASCII chat text. Unavailable keyboard
+        // layout characters can fall back to Unicode; never use Ctrl/Alt text chords.
         if (mapped != -1 && ((mapped >> 8) & ~1) == 0) {
             bool shift = (mapped >> 8) & 1;
             WORD scan = WORD(MapVirtualKeyExW(mapped & 0xFF, MAPVK_VK_TO_VSC_EX, layout));

@@ -15,7 +15,7 @@ void freeData(UINT format, HANDLE data) {
 HANDLE duplicate(UINT format, HANDLE data) {
     if (format == CF_ENHMETAFILE || format == CF_DSPENHMETAFILE)
         return CopyEnhMetaFileW(static_cast<HENHMETAFILE>(data), nullptr);
-    if (format == CF_OWNERDISPLAY || (format >= CF_PRIVATEFIRST && format <= CF_PRIVATELAST)) return nullptr;
+    if (format == CF_OWNERDISPLAY || ((format >= CF_PRIVATEFIRST && format <= CF_PRIVATELAST) || (format >= CF_GDIOBJFIRST && format <= CF_GDIOBJLAST))) return nullptr;
     UINT kind = format == CF_DSPBITMAP ? CF_BITMAP : format == CF_DSPMETAFILEPICT ? CF_METAFILEPICT : format;
     return OleDuplicateData(data, CLIPFORMAT(kind), 0);
 }
@@ -55,6 +55,12 @@ bool ClipboardText::put(const std::wstring& text) {
     }
     bool placed = SetClipboardData(CF_UNICODETEXT, replacement) != nullptr;
     if (!placed) GlobalFree(replacement);
+    if (placed) {
+        for (const wchar_t* marker : {L"CanIncludeInClipboardHistory", L"CanUploadToCloudClipboard"}) {
+            auto flag = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, sizeof(DWORD));
+            if (flag && !SetClipboardData(RegisterClipboardFormatW(marker), flag)) GlobalFree(flag);
+        }
+    }
     sequence = GetClipboardSequenceNumber(); active = true;
     CloseClipboard();
     if (!placed) restore();
