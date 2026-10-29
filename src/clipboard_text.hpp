@@ -16,5 +16,6 @@ public:
     ~ClipboardText();
     bool put(const std::wstring& text, bool classicUtf8 = false);
     bool restore();
+    bool ownsCurrent() const { return active && GetClipboardOwner() == owner; }
 };
 }

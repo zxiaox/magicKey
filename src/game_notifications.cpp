@@ -122,6 +122,9 @@ void GameNotifications::tick() {
     } else if (now >= next && stage == 5) {
         failed = !paste(false); stage = 3; next = now + 50;
     } else if (now >= next && stage == 3) {
+        if (!clipboard.ownsCurrent()) {
+            cancel(); report = L"Not sent: clipboard changed during the paste sequence."; return;
+        }
         failed = !enter(true); stage = 4; next = now + 80;
     } else if (now >= next && stage == 4) {
         failed = !enter(false);

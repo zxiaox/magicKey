@@ -162,9 +162,12 @@ int main() {
             checkClipboard(game, L"original clipboard");
         }
         // A user copy made during the paste must win over the saved snapshot.
+        auto beforeUserCopy = submitted.size();
         notifications.queue(game, configurationMessage(L"新方案", 1));
         pump(notifications, 160); clipboardText(game, L"new user copy", false);
         pump(notifications, 600); checkClipboard(game, L"new user copy", false);
+        require(submitted.size() == beforeUserCopy, "Submitted after clipboard contents changed");
+        require(notifications.diagnostics().find(L"clipboard changed") != std::wstring::npos, "Missing changed-clipboard diagnostic");
         std::size_t countBeforeFocusLoss = submitted.size();
         // Different foreground HWND in the same process still cancels delivery.
         HWND other = CreateWindowW(wc.lpszClassName, L"Other app receiver", WS_OVERLAPPEDWINDOW, 150,150,500,250,nullptr,nullptr,wc.hInstance,nullptr);
