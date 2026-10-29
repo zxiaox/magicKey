@@ -1,13 +1,8 @@
 Portable MagicKey for Windows 10/11 x64. End users do not need Visual Studio or an installer.
 
-New in this version:
+New in this version: fixed the Windows taskbar icon. MagicKey explicitly supplies large and small window icons, a stable application identity, and taskbar group/pinning icon and relaunch metadata. The taskbar identity is reapplied when Explorer restarts.
 
-- **Alt + 1 … Alt + 9, Alt + 0** select and enable the first ten profiles in list order. Shortcuts appear beside profile names. Top-row digits are distinct from the numpad; repeats are consumed once per press.
-- When Warcraft III is foreground, profile shortcuts send **Configuration [profile name] enabled.** in normal game chat.
-- **Ctrl + Alt + F12** also sends **magicKey enabled.** or **magicKey disabled.** while Warcraft is foreground.
-- Chat notifications wait for shortcut release, support Unicode names, bypass mappings, and cancel on focus changes. A pending notification is replaced by the newest status.
-
-Notifications use the current/default chat audience and can be seen by other players. They reset chat with Escape first, which can discard a draft or cancel an action. Use during gameplay; game-specific acceptance still needs verification on your installation. Existing profiles and themes are preserved.
+If an older pinned shortcut still shows the old icon after updating, unpin it, launch the updated MagicKey.exe, then pin the running app again. Profiles, themes, shortcuts and game notifications are unchanged.
 
 Download **MagicKey-windows-x64-portable.zip**, extract it into a writable folder, and run **MagicKey.exe**. The executable is also available separately for existing installations and the in-app updater. The source-code archives are intended for developers.
 

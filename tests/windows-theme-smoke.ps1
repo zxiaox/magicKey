@@ -4,7 +4,35 @@ Add-Type -AssemblyName System.Drawing
 Add-Type @'
 using System;
 using System.Runtime.InteropServices;
+[StructLayout(LayoutKind.Sequential)] public struct PropertyKey { public Guid Format; public uint Id; }
+[StructLayout(LayoutKind.Explicit, Size=24)] public struct PropertyValue {
+    [FieldOffset(0)] public ushort Type;
+    [FieldOffset(8)] public IntPtr Text;
+}
+[ComImport, Guid("886d8eeb-8cf2-4446-8d02-cdba1dbdcf99"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+public interface WindowPropertyStore {
+    [PreserveSig] int GetCount(out uint count);
+    [PreserveSig] int GetAt(uint index, out PropertyKey key);
+    [PreserveSig] int GetValue(ref PropertyKey key, out PropertyValue value);
+    [PreserveSig] int SetValue(ref PropertyKey key, ref PropertyValue value);
+    [PreserveSig] int Commit();
+}
 public static class ThemeWindow {
+    [DllImport("shell32.dll")] private static extern int SHGetPropertyStoreForWindow(IntPtr h, ref Guid iid, out WindowPropertyStore store);
+    [DllImport("ole32.dll")] private static extern int PropVariantClear(ref PropertyValue value);
+    [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern uint RegisterWindowMessage(string name);
+    public static string TaskbarProperty(IntPtr h, uint id) {
+        Guid iid = new Guid("886d8eeb-8cf2-4446-8d02-cdba1dbdcf99");
+        WindowPropertyStore store;
+        Marshal.ThrowExceptionForHR(SHGetPropertyStoreForWindow(h, ref iid, out store));
+        try {
+            var key = new PropertyKey { Format = new Guid("9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3"), Id = id };
+            PropertyValue value;
+            Marshal.ThrowExceptionForHR(store.GetValue(ref key, out value));
+            try { return value.Type == 31 ? Marshal.PtrToStringUni(value.Text) : null; }
+            finally { PropVariantClear(ref value); }
+        } finally { Marshal.ReleaseComObject(store); }
+    }
     [StructLayout(LayoutKind.Sequential)] public struct Rect { public int Left, Top, Right, Bottom; }
     [StructLayout(LayoutKind.Sequential)] public struct Point { public int X, Y; }
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out Rect r);
@@ -60,6 +88,18 @@ try {
         $process = Start-MagicKey
         $hwnd = $process.MainWindowHandle
         if ([ThemeWindow]::GetClassLongPtr($hwnd, -14) -eq [IntPtr]::Zero) { throw 'App icon missing' }
+        foreach ($iconKind in 0,1) {
+            if ([ThemeWindow]::SendMessage($hwnd, 0x7F, [IntPtr]$iconKind, [IntPtr]::Zero) -eq [IntPtr]::Zero) { throw 'Explicit small/large window icon missing' }
+        }
+        if ([ThemeWindow]::GetClassLongPtr($hwnd, -34) -eq [IntPtr]::Zero) { throw 'Small window class icon missing' }
+        if ([ThemeWindow]::TaskbarProperty($hwnd, 5) -cne 'zxiaox.MagicKey') { throw 'Taskbar application identity missing' }
+        if ([ThemeWindow]::TaskbarProperty($hwnd, 3) -cne ($app + ',-101')) { throw 'Taskbar group icon does not point to embedded icon' }
+        if ([ThemeWindow]::TaskbarProperty($hwnd, 2) -cne ('"' + $app + '"')) { throw 'Taskbar relaunch path incorrect' }
+        if ([ThemeWindow]::TaskbarProperty($hwnd, 4) -cne ('@' + $app + ',-201')) { throw 'Taskbar display name missing' }
+        # Simulate Explorer restarting; metadata and explicit icons must survive.
+        $created = [ThemeWindow]::RegisterWindowMessage('TaskbarCreated')
+        $null = [ThemeWindow]::SendMessage($hwnd, $created, [IntPtr]::Zero, [IntPtr]::Zero)
+        if ([ThemeWindow]::TaskbarProperty($hwnd, 3) -cne ($app + ',-101')) { throw 'Taskbar icon not restored' }
         $toggle = [ThemeWindow]::GetDlgItem($hwnd, 112)
         $activeLabel = New-Object Text.StringBuilder 256
         $null = [ThemeWindow]::GetWindowText($toggle, $activeLabel, 256)

@@ -42,7 +42,7 @@ Download **MagicKey-windows-x64-portable.zip** from [GitHub Releases](https://gi
 
 A release must first be published by the workflow below before the download links or in-app checks can return an executable. This source tree alone is not a published GitHub release.
 
-The app displays **MagicKey v1.5.0** in its heading. Windows file properties also contain the product name and version, generated from the single version in `CMakeLists.txt`.
+The app displays **MagicKey v1.5.1** in its heading. Windows file properties also contain the product name and version, generated from the single version in `CMakeLists.txt`.
 
 ## Build and publish (maintainers)
 
@@ -55,8 +55,8 @@ To publish a stable release:
 
    ```sh
    git push origin main
-   git tag v1.5.0
-   git push origin v1.5.0
+   git tag v1.5.1
+   git push origin v1.5.1
    ```
 
 3. Open **Actions → Build and release MagicKey**. After compilation, tests, and packaging succeed, the tag run creates a draft release with all four download assets, then publishes it as the latest stable release. A tag that differs from the compiled version fails before publication. Branch and pull-request runs never publish releases.
@@ -155,3 +155,5 @@ Implementation references: [LowLevelKeyboardProc](https://learn.microsoft.com/en
 Updater tests additionally cover strict numeric versions, malformed release metadata, draft/prerelease rejection, trusted repository URLs, exact asset selection, size limits, checksum parsing, x64 PE identification, and Windows command-line quoting. The Windows helper integration test runs in CI; game compatibility and translated interface layout still require a real Windows smoke test.
 
 Theme tests cover all four preference values, malformed appearance files, and text contrast. Windows UI tests switch each theme through its real menu, restart the app, verify startup is enabled, pause/resume works, saved menu selections persist, the app icon is present, and the background artwork renders, ensure profiles remain byte-identical, and capture screenshots for all four language/theme combinations.
+
+Taskbar identity: MagicKey sets explicit large/small window icons and the stable `zxiaox.MagicKey` AppUserModelID. Taskbar group/pinning properties point to the embedded icon and the current portable executable. These are restored after Explorer restarts. If an older pinned shortcut still shows a cached icon, unpin it, launch the updated MagicKey.exe, and pin the running app again. No system icon-cache deletion is required.

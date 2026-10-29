@@ -13,6 +13,7 @@
 #include "game_notifications.hpp"
 #include "updater.hpp"
 #include "theme_ui.hpp"
+#include "app_identity.hpp"
 
 using namespace mywarkey;
 constexpr UINT ToggleMessage = WM_APP + 1, InputError = WM_APP + 2, CapturedKey = WM_APP + 3, UpdateFinished = WM_APP + 4, ProfileSwitch = WM_APP + 5;
@@ -487,6 +488,8 @@ void command(int id, int notification) {
     refresh();
 }
 LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
+    static const UINT taskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
+    if (message == taskbarCreated) { magickey::setWindowIdentity(hwnd); return 0; }
     switch (message) {
         case WM_CREATE: window = hwnd; makeInterface(); SetTimer(hwnd, NotificationTimer, 25, nullptr); return 0;
         case WM_ERASEBKGND: return 1;
@@ -638,6 +641,7 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
 }
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     if (auto helperResult = magickey::updates::handleUpdaterArguments()) return *helperResult;
+    magickey::initializeAppIdentity();
     HANDLE single = CreateMutexW(nullptr, FALSE, L"Local\\mywarkey.Portable.SingleInstance");
     if (!single) return 1;
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
@@ -679,17 +683,18 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     }
     themeUI.initialize(theme);
     font = themeUI.body();
-    WNDCLASSW wc{};
+    WNDCLASSEXW wc{}; wc.cbSize = sizeof(wc);
     wc.lpfnWndProc = windowProc; wc.hInstance = instance; wc.lpszClassName = ClassName;
-    wc.hCursor = LoadCursorW(nullptr, IDC_ARROW); wc.hIcon = LoadIconW(instance, MAKEINTRESOURCEW(101));
+    wc.hCursor = LoadCursorW(nullptr, IDC_ARROW); wc.hIcon = magickey::appIcon(false); wc.hIconSm = magickey::appIcon(true);
     wc.hbrBackground = nullptr;
-    RegisterClassW(&wc);
+    RegisterClassExW(&wc);
     RECT bounds{0, 0, 900, 668};
     DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN;
     AdjustWindowRect(&bounds, style, TRUE);
     window = CreateWindowExW(WS_EX_CONTROLPARENT, ClassName, L"MagicKey", style, CW_USEDEFAULT, CW_USEDEFAULT,
         bounds.right - bounds.left, bounds.bottom - bounds.top, nullptr, nullptr, instance, nullptr);
     if (!window) { CloseHandle(single); return 1; }
+    magickey::setWindowIdentity(window);
     hookReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (hookReady) hookThread = CreateThread(nullptr, 0, keyboardThread, nullptr, 0, &hookThreadId);
     if (!hookReady || !hookThread || WaitForSingleObject(hookReady, 5000) != WAIT_OBJECT_0 || !hookInstalled) {

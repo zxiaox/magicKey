@@ -1,0 +1,8 @@
+#pragma once
+#include <windows.h>
+namespace magickey {
+inline constexpr wchar_t AppUserModelId[] = L"zxiaox.MagicKey";
+void initializeAppIdentity();
+void setWindowIdentity(HWND window);
+HICON appIcon(bool small);
+}
