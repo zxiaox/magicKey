@@ -81,6 +81,7 @@ void checkClipboard(HWND window, const std::wstring& expected, bool custom = tru
         if (bytes) GlobalUnlock(binary);
     }
     CloseClipboard();
+    if (!correct || !binaryCorrect) std::cerr << "Clipboard verification: text=" << correct << ", custom=" << binaryCorrect << ", formats=" << CountClipboardFormats() << "\n";
     require(correct && binaryCorrect, "Clipboard text or custom format was not preserved");
 }
 int main() {

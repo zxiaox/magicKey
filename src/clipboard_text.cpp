@@ -61,16 +61,19 @@ bool ClipboardText::put(const std::wstring& text) {
             if (flag && !SetClipboardData(RegisterClipboardFormatW(marker), flag)) GlobalFree(flag);
         }
     }
-    sequence = GetClipboardSequenceNumber(); active = true;
+    active = true;
     CloseClipboard();
     if (!placed) restore();
     return placed;
 }
 bool ClipboardText::restore() {
     if (!active) return true;
-    if (GetClipboardSequenceNumber() != sequence) { discard(); return true; } // Respect a newer user copy.
+    // Reading/synthesizing another clipboard format can change its sequence
+    // number without a user copy. Our private owner window distinguishes that
+    // from a new copy, whose owner is another window (or NULL).
+    if (GetClipboardOwner() != owner) { discard(); return true; }
     if (!OpenClipboard(owner)) return false;
-    if (GetClipboardSequenceNumber() != sequence) { CloseClipboard(); discard(); return true; }
+    if (GetClipboardOwner() != owner) { CloseClipboard(); discard(); return true; }
     if (!EmptyClipboard()) { CloseClipboard(); return false; }
     bool restored = true;
     for (auto& item : saved) {

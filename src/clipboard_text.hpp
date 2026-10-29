@@ -7,7 +7,6 @@ class ClipboardText {
     struct Saved { UINT format; HANDLE data; };
     std::vector<Saved> saved;
     HWND owner = nullptr;
-    DWORD sequence = 0;
     bool active = false;
     void discard();
 public:
