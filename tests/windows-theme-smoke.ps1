@@ -126,6 +126,32 @@ try {
         $process = $null
         Write-Host "PASS: $name in language $language persisted, rendered, and preserved profiles."
     }
+    # Exercise the production profile-switch command with all ten digit slots,
+    # including a paused app, an unavailable slot and persistence after restart.
+    $profile = Join-Path $root 'mywarkey.profiles'
+    $profiles = (0..10 | ForEach-Object { '"Profile' + $_ + '" 0 0' }) -join ' '
+    [IO.File]::WriteAllText($profile, "MYWARKEY 2 0 11 0 1 $profiles`n")
+    $process = Start-MagicKey
+    $hwnd = $process.MainWindowHandle
+    foreach ($index in 0..9) {
+        $null = [ThemeWindow]::SendMessage($hwnd, 0x111, [IntPtr]112, [IntPtr]::Zero) # Pause first.
+        $null = [ThemeWindow]::SendMessage($hwnd, 0x8005, [IntPtr]$index, [IntPtr]::Zero)
+        $contents = [IO.File]::ReadAllText($profile)
+        if (!$contents.StartsWith("MYWARKEY 2 $index 11 0 1")) { throw "Profile slot $index did not persist" }
+        $label = New-Object Text.StringBuilder 256
+        $null = [ThemeWindow]::GetWindowText([ThemeWindow]::GetDlgItem($hwnd, 112), $label, 256)
+        if ($label.ToString() -cne 'Pause remapping') { throw 'Profile shortcut did not enable remapping' }
+    }
+    $before = [IO.File]::ReadAllText($profile)
+    $null = [ThemeWindow]::SendMessage($hwnd, 0x8005, [IntPtr]10, [IntPtr]::Zero)
+    if ([IO.File]::ReadAllText($profile) -cne $before) { throw 'Nonexistent hotkey slot changed selection' }
+    Close-MagicKey $process
+    $process = Start-MagicKey
+    $selection = [ThemeWindow]::SendMessage([ThemeWindow]::GetDlgItem($process.MainWindowHandle, 101), 0x147, [IntPtr]::Zero, [IntPtr]::Zero).ToInt32()
+    if ($selection -ne 9) { throw 'Shortcut profile selection did not survive restart' }
+    Close-MagicKey $process
+    $process = $null
+    Write-Host 'PASS: ten profile shortcut slots enable and persist; invalid slot ignored.'
 } finally {
     if ($process -and !$process.HasExited) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue }
     Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue

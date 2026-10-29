@@ -33,7 +33,9 @@ bool GameNotifications::key(WORD scan) {
     INPUT input[2]{};
     for (auto& i : input) { i.type = INPUT_KEYBOARD; i.ki.wScan = scan; i.ki.dwFlags = KEYEVENTF_SCANCODE; }
     input[1].ki.dwFlags |= KEYEVENTF_KEYUP;
-    return SendInput(2, input, sizeof(INPUT)) == 2;
+    UINT sent = SendInput(2, input, sizeof(INPUT));
+    if (sent == 1) SendInput(1, &input[1], sizeof(INPUT)); // Pair partial down.
+    return sent == 2;
 }
 void GameNotifications::queue(HWND game, std::wstring message) {
     DWORD pid = warcraftProcess(game);
@@ -70,7 +72,11 @@ void GameNotifications::tick() {
             input.push_back(i); i.ki.dwFlags |= KEYEVENTF_KEYUP; input.push_back(i);
         }
         // The whole text is inserted atomically, bypassing our remapper.
-        if (SendInput(UINT(input.size()), input.data(), sizeof(INPUT)) != input.size()) { cancel(); return; }
+        UINT sent = SendInput(UINT(input.size()), input.data(), sizeof(INPUT));
+        if (sent != input.size()) {
+            if ((sent & 1) && sent < input.size()) SendInput(1, &input[sent], sizeof(INPUT));
+            cancel(); return;
+        }
         stage = 3; next = now + 100;
     } else if (now >= next && stage == 3) {
         if (!key(0x1C)) { cancel(); return; } // Submit only to the same window.
