@@ -236,6 +236,8 @@ void refreshMenus() {
         AppendMenuW(themes, MF_STRING | (i == int(themeUI.theme()) ? MF_CHECKED : 0), ThemeMenu + i, tr(magickey::Themes[i].name));
     AppendMenuW(options, MF_POPUP, UINT_PTR(languages), tr(L"Language"));
     AppendMenuW(options, MF_POPUP, UINT_PTR(themes), tr(L"Theme"));
+    AppendMenuW(options, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(options, MF_STRING, CheckUpdates, tr(L"Check for updates"));
     AppendMenuW(bar, MF_POPUP, UINT_PTR(options), tr(L"Settings"));
     HMENU previous = GetMenu(window);
     SetMenu(window, bar); DrawMenuBar(window);
@@ -267,11 +269,10 @@ void cancelCapture() {
     updateCaptureButtons();
 }
 void updateUpdateButton() {
-    HWND button = GetDlgItem(window, CheckUpdates);
     const wchar_t* text = closeAfterUpdate ? L"Cancelling update..." : updateClient.busy() ?
         (downloadingUpdate ? L"Downloading update..." : L"Checking for updates...") : L"Check for updates";
-    SetWindowTextW(button, tr(text));
-    EnableWindow(button, !updateClient.busy());
+    HMENU menu = GetSubMenu(GetMenu(window), 0);
+    ModifyMenuW(menu, CheckUpdates, MF_BYCOMMAND | MF_STRING | (updateClient.busy() ? MF_GRAYED : MF_ENABLED), CheckUpdates, tr(text));
 }
 void beginUpdateCheck() {
     if (updateClient.busy()) return;
@@ -394,9 +395,8 @@ void makeInterface() {
         BlockWindows, 310, 508, 544, 30);
     scanBox = control(L"BUTTON", L"Game-compatible input (scan codes)", BS_AUTOCHECKBOX | WS_TABSTOP,
         ScanCodes, 310, 546, 544, 30);
-    statusLabel = control(L"STATIC", L"", 0, 0, 58, 626, 394, 22);
+    statusLabel = control(L"STATIC", L"", 0, 0, 58, 626, 590, 22);
     SendMessageW(statusLabel, WM_SETFONT, WPARAM(font), TRUE);
-    control(L"BUTTON", L"Check for updates", WS_TABSTOP, CheckUpdates, 474, 620, 184, 32);
     toggleButton = control(L"BUTTON", L"", BS_DEFPUSHBUTTON | WS_TABSTOP, Toggle, 676, 620, 178, 32);
     SendMessageW(profileBox, CB_SETITEMHEIGHT, WPARAM(-1), 28);
     themeUI.apply(window, mappingList, themeUI.theme());

@@ -64,7 +64,7 @@ If double-clicking an older script seems to do nothing, run it from Command Prom
 
 ## In-app updates
 
-Click **Check for updates**. MagicKey requests `https://api.github.com/repos/zxiaox/magicKey/releases/latest` in a background worker, compares numeric stable versions (1.10.0 is newer than 1.9.0), and reports whether a newer release exists. Nothing is checked automatically at startup. A missing public release, invalid metadata, connection failure, or GitHub rate limit is reported separately from being up to date.
+Click **Settings → Check for updates**. MagicKey requests `https://api.github.com/repos/zxiaox/magicKey/releases/latest` in a background worker, compares numeric stable versions (1.10.0 is newer than 1.9.0), and reports whether a newer release exists. Nothing is checked automatically at startup. A missing public release, invalid metadata, connection failure, or GitHub rate limit is reported separately from being up to date.
 
 When an update is available, approve **Download and install**. MagicKey downloads only this repository's `MagicKey.exe` release asset over HTTPS, accepts redirects only to GitHub's asset hosts, checks the exact file length and Windows x64 PE header, and verifies SHA-256 against GitHub's asset digest and the attached `MagicKey.exe.sha256` when available. A release must provide a digest or checksum. A checksum checks the asset against release metadata; it is not a publisher code signature or protection against a compromised repository account.
 
