@@ -24,7 +24,7 @@ HWND window, profileBox, nameEdit, mappingList, sourceBox, targetBox, blockBox, 
 std::vector<std::pair<HWND, std::wstring>> localizedControls;
 HFONT font;
 magickey::ThemeUI themeUI;
-constexpr int LanguageMenu = 2000, ThemeMenu = 2010;
+constexpr int LanguageMenu = 2000, ThemeMenu = 2010, NotificationDiagnostics = 2020;
 HIMAGELIST rowImages;
 HANDLE hookThread, hookReady;
 DWORD hookThreadId;
@@ -257,6 +257,7 @@ void refreshMenus() {
     AppendMenuW(options, MF_POPUP, UINT_PTR(themes), tr(L"Theme"));
     AppendMenuW(options, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(options, MF_STRING, CheckUpdates, tr(L"Check for updates"));
+    AppendMenuW(options, MF_STRING, NotificationDiagnostics, tr(L"Notification diagnostics"));
     AppendMenuW(bar, MF_POPUP, UINT_PTR(options), tr(L"Settings"));
     HMENU previous = GetMenu(window);
     SetMenu(window, bar); DrawMenuBar(window);
@@ -438,6 +439,7 @@ void command(int id, int notification) {
     if (id == ProfileName || (notification != BN_CLICKED && notification != CBN_SELCHANGE)) return;
     cancelCapture();
     if (id >= ThemeMenu && id < ThemeMenu + 4) { changeTheme(id - ThemeMenu); return; }
+    if (id == NotificationDiagnostics) { MessageBoxW(window, gameNotifications.diagnostics().c_str(), tr(L"Notification diagnostics"), MB_OK | MB_ICONINFORMATION); return; }
     if (id == CheckUpdates) { beginUpdateCheck(); return; }
     if (id == DisableTarget) { targetChoice = 0; updateCaptureButtons(); return; }
     auto candidate = settings;

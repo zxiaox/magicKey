@@ -48,7 +48,9 @@ When Warcraft III is foreground, these shortcuts send:
 Configuration [actual profile name] enabled.
 Ctrl + Alt + F12 sends magicKey enabled. / magicKey disabled.
 These are normal chat messages visible to the current/default audience.
-Wait for all keys to be released. Sending starts with Escape, which can discard
-an existing chat draft or cancel an action. Use during gameplay outside chat.
+Wait for all keys to be released. Sending follows Enter -> message -> Enter, with timed Enter presses.
+Use during gameplay with chat closed; an open draft may otherwise be submitted.
+English text uses normal keys; non-Latin names use Unicode fallback.
+If no message appears, open Settings > Notification diagnostics after trying.
 Background games and other apps never receive these messages. Actual game
 compatibility depends on your Warcraft version, settings and privileges.

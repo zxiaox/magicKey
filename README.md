@@ -26,7 +26,7 @@ When Warcraft III is the foreground application, these shortcuts send **Configur
 
 The app recognizes `War3.exe`, `Warcraft III.exe`, and `Warcraft III Reforged.exe` by executable name. It never activates a background game or types into another foreground app. Messages wait up to 2.5 seconds for all keys and mouse buttons to be released; focus changes, further typing, or a timeout cancel delivery. Rapid changes replace a pending notification with the latest one. Input bypasses MagicKey's mappings, even when remapping is disabled.
 
-**Chat limitation:** no game-memory integration is used, so the app cannot reliably detect gameplay versus menus or whether chat is already open. The notification presses Escape (which can cancel an action or discard a draft), Enter, types the text, and Enter again. Use the shortcut during gameplay, outside an unfinished chat draft. Actual chat support depends on your Warcraft version, chat settings, and matching administrator privileges. The app cannot confirm that the game accepted a message. Test on your installation before relying on notifications.
+**Chat limitation:** no game-memory integration is used, so the app cannot reliably detect gameplay versus menus or whether chat is already open. The notification presses and holds Enter for 80 ms, releases it, waits for chat to open, types the text using regular keyboard scan codes where possible, then holds/releases Enter again to submit. Non-Latin profile names use Unicode fallback. No Escape is sent before a normal notification. Use the shortcut during gameplay with chat closed, outside an unfinished draft. If chat is already open, the opening Enter can submit that draft. Actual chat support depends on your Warcraft version, chat settings, and matching administrator privileges. The app cannot confirm that the game accepted a message. After a failed attempt, open **Settings → Notification diagnostics** to see whether game detection, shortcut release, focus, or Windows input delivery failed. Test on your installation before relying on notifications.
 
 ## Themes and refreshed interface
 
@@ -42,7 +42,7 @@ Download **MagicKey-windows-x64-portable.zip** from [GitHub Releases](https://gi
 
 A release must first be published by the workflow below before the download links or in-app checks can return an executable. This source tree alone is not a published GitHub release.
 
-The app displays **MagicKey v1.5.1** in its heading. Windows file properties also contain the product name and version, generated from the single version in `CMakeLists.txt`.
+The app displays **MagicKey v1.5.2** in its heading. Windows file properties also contain the product name and version, generated from the single version in `CMakeLists.txt`.
 
 ## Build and publish (maintainers)
 
@@ -55,8 +55,8 @@ To publish a stable release:
 
    ```sh
    git push origin main
-   git tag v1.5.1
-   git push origin v1.5.1
+   git tag v1.5.2
+   git push origin v1.5.2
    ```
 
 3. Open **Actions → Build and release MagicKey**. After compilation, tests, and packaging succeed, the tag run creates a draft release with all four download assets, then publishes it as the latest stable release. A tag that differs from the compiled version fails before publication. Branch and pull-request runs never publish releases.

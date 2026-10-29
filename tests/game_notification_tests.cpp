@@ -3,17 +3,27 @@
 #include <vector>
 #include <stdexcept>
 using namespace mywarkey;
-bool chat = false;
+bool chat = false, packet = false, enterTimingValid = true;
+ULONGLONG enterDown = 0;
+int escapes = 0, asciiPackets = 0;
 std::wstring draft;
 std::vector<std::wstring> submitted;
 LRESULT CALLBACK receiver(HWND window, UINT message, WPARAM w, LPARAM l) {
-    if (message == WM_KEYDOWN && w == VK_ESCAPE) { chat = false; draft.clear(); return 0; }
+    if (message == WM_KEYDOWN) {
+        packet = w == VK_PACKET;
+        if (w == VK_ESCAPE) { ++escapes; chat = false; draft.clear(); return 0; }
+        if (w == VK_RETURN) enterDown = GetTickCount64();
+    }
+    // Model a game's frame-based Enter handling: instantaneous down/up pairs
+    // are rejected, even though a normal text editor would accept them.
+    if (message == WM_KEYUP && w == VK_RETURN) {
+        if (!enterDown || GetTickCount64() - enterDown < 50) { enterTimingValid = false; return 0; }
+        if (chat) { submitted.push_back(draft); draft.clear(); }
+        chat = !chat; enterDown = 0; return 0;
+    }
     if ((message == WM_SYSKEYDOWN || message == WM_SYSKEYUP) && w == VK_MENU) return 0;
     if (message == WM_CHAR) {
-        if (w == 13) {
-            if (chat) { submitted.push_back(draft); draft.clear(); }
-            chat = !chat;
-        } else if (chat && w >= 32) draft += wchar_t(w);
+        if (w >= 32 && chat) { if (packet && w < 128) ++asciiPackets; draft += wchar_t(w); }
         return 0;
     }
     return DefWindowProcW(window, message, w, l);
@@ -48,21 +58,26 @@ int main() {
         require(submitted.empty() && !notifications.typing(), "Sent while Alt was held");
         alt(false); pump(notifications, 900);
         require(submitted == std::vector<std::wstring>{L"Configuration 测试 日本語 한국어 enabled."}, "Unicode message mismatch");
-        // Never send an unrelated existing draft when opening the prompt.
-        chat = true; draft = L"do not submit this draft";
-        notifications.queue(game, L"magicKey disabled."); pump(notifications, 900);
-        require(submitted.size() == 2 && submitted.back() == L"magicKey disabled.", "Existing draft was submitted");
-        notifications.queue(game, L"magicKey enabled."); pump(notifications, 900);
+        notifications.queue(game, L"magicKey disabled."); pump(notifications, 1000);
+        require(submitted.size() == 2 && submitted.back() == L"magicKey disabled.", "Disable message mismatch");
+        notifications.queue(game, L"magicKey enabled."); pump(notifications, 1000);
         require(submitted.size() == 3 && submitted.back() == L"magicKey enabled." && !chat, "Enable notification mismatch");
+        require(escapes == 0, "An Escape preceded the normal chat sequence");
+        require(enterTimingValid, "Enter was not held long enough for a game frame");
+        require(asciiPackets == 0, "English chat used Unicode packets instead of ordinary keys");
+        require(notifications.diagnostics().find(L"delivered to Windows") != std::wstring::npos, "No delivery diagnostic");
         // Different foreground HWND in the same process still cancels delivery.
         HWND other = CreateWindowW(wc.lpszClassName, L"Other app receiver", WS_OVERLAPPEDWINDOW, 150,150,500,250,nullptr,nullptr,wc.hInstance,nullptr);
         notifications.queue(game, L"must not be sent");
+        pump(notifications, 20); // Interrupt while our opening Enter is held.
         ShowWindow(other, SW_SHOW); SetForegroundWindow(other); pump(notifications, 900);
         require(submitted.size() == 3, "Message leaked after focus changed");
         notifications.queue(game, L"background must not send"); pump(notifications, 500);
         require(submitted.size() == 3, "Background target accepted");
+        require(!(GetAsyncKeyState(VK_RETURN) & 0x8000), "Cancelled Enter remained down");
+        require(notifications.diagnostics().find(L"not recognized") != std::wstring::npos, "Skipped notification has no diagnostic");
         DestroyWindow(other); DestroyWindow(game);
-        std::cout << "Game notification input, Unicode, modifiers, drafts and focus tests passed.\n";
+        std::cout << "Game notification input, timed Enter, scan-code text, Unicode, modifiers and focus tests passed.\n";
         return 0;
     } catch (const std::exception& error) { alt(false); std::cerr << error.what() << '\n'; return 1; }
 }

@@ -1,8 +1,10 @@
 Portable MagicKey for Windows 10/11 x64. End users do not need Visual Studio or an installer.
 
-New in this version: fixed the Windows taskbar icon. MagicKey explicitly supplies large and small window icons, a stable application identity, and taskbar group/pinning icon and relaunch metadata. The taskbar identity is reapplied when Explorer restarts.
+New in this version: corrected Warcraft chat notifications to use **Enter → message → Enter**, without an initial Escape. Enter is now held for 80 ms so a game's input polling can observe it. English text uses regular keyboard scan codes; non-Latin profile names retain Unicode fallback. Focus-change cancellation pairs any held Enter with its release.
 
-If an older pinned shortcut still shows the old icon after updating, unpin it, launch the updated MagicKey.exe, then pin the running app again. Profiles, themes, shortcuts and game notifications are unchanged.
+Added **Settings → Notification diagnostics** to report unrecognized foreground processes, shortcut-release timeouts, focus changes, and blocked Windows input. A successful input submission does not prove that Warcraft accepted chat; actual game verification remains necessary.
+
+Use notification shortcuts during gameplay with chat closed. An already-open chat draft can be submitted by the opening Enter. Profiles, themes and shortcuts are preserved.
 
 Download **MagicKey-windows-x64-portable.zip**, extract it into a writable folder, and run **MagicKey.exe**. The executable is also available separately for existing installations and the in-app updater. The source-code archives are intended for developers.
 

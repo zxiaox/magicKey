@@ -4,6 +4,7 @@
 namespace mywarkey {
 struct Translation { const wchar_t *en, *zh, *ja, *ko; };
 inline constexpr Translation translations[] = {
+    {L"Notification diagnostics", L"通知诊断", L"通知の診断", L"알림 진단"},
     {L"Toggle remapping", L"切换改键状态", L"リマップの切り替え", L"키 매핑 전환"},
     {L"Settings", L"设置", L"設定", L"설정"},
     {L"Theme", L"主题", L"テーマ", L"테마"},
