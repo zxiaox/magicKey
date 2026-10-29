@@ -631,6 +631,7 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
             } else DestroyWindow(hwnd);
             return 0;
         case WM_DESTROY:
+            magickey::clearWindowIdentity(hwnd);
             KillTimer(hwnd, NotificationTimer); gameNotifications.cancel(); notificationTyping = false;
             cancelCapture();
             enabled = false; syncEngine();

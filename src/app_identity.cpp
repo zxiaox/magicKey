@@ -42,4 +42,17 @@ void setWindowIdentity(HWND window) {
     }
     if (SUCCEEDED(initialized)) CoUninitialize();
 }
+void clearWindowIdentity(HWND window) {
+    HRESULT initialized = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    IPropertyStore* store = nullptr;
+    if (SUCCEEDED(SHGetPropertyStoreForWindow(window, IID_PPV_ARGS(&store)))) {
+        PROPVARIANT empty{}; // VT_EMPTY releases the window-owned shell values.
+        for (const PROPERTYKEY* key : {&PKEY_AppUserModel_RelaunchIconResource, &PKEY_AppUserModel_RelaunchCommand,
+                &PKEY_AppUserModel_RelaunchDisplayNameResource, &PKEY_AppUserModel_ID})
+            store->SetValue(*key, empty);
+        store->Release();
+    }
+    if (SUCCEEDED(initialized)) CoUninitialize();
+}
+
 }

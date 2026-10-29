@@ -21,6 +21,16 @@ public static class ThemeWindow {
     [DllImport("shell32.dll")] private static extern int SHGetPropertyStoreForWindow(IntPtr h, ref Guid iid, out WindowPropertyStore store);
     [DllImport("ole32.dll")] private static extern int PropVariantClear(ref PropertyValue value);
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern uint RegisterWindowMessage(string name);
+    public static void ClearTaskbarProperty(IntPtr h, uint id) {
+        Guid iid = new Guid("886d8eeb-8cf2-4446-8d02-cdba1dbdcf99");
+        WindowPropertyStore store;
+        Marshal.ThrowExceptionForHR(SHGetPropertyStoreForWindow(h, ref iid, out store));
+        try {
+            var key = new PropertyKey { Format = new Guid("9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3"), Id = id };
+            var empty = new PropertyValue();
+            Marshal.ThrowExceptionForHR(store.SetValue(ref key, ref empty));
+        } finally { Marshal.ReleaseComObject(store); }
+    }
     public static string TaskbarProperty(IntPtr h, uint id) {
         Guid iid = new Guid("886d8eeb-8cf2-4446-8d02-cdba1dbdcf99");
         WindowPropertyStore store;
@@ -97,6 +107,8 @@ try {
         if ([ThemeWindow]::TaskbarProperty($hwnd, 2) -cne ('"' + $app + '"')) { throw 'Taskbar relaunch path incorrect' }
         if ([ThemeWindow]::TaskbarProperty($hwnd, 4) -cne ('@' + $app + ',-201')) { throw 'Taskbar display name missing' }
         # Simulate Explorer restarting; metadata and explicit icons must survive.
+        [ThemeWindow]::ClearTaskbarProperty($hwnd, 3)
+        if ([ThemeWindow]::TaskbarProperty($hwnd, 3)) { throw 'Could not reset taskbar property for restart test' }
         $created = [ThemeWindow]::RegisterWindowMessage('TaskbarCreated')
         $null = [ThemeWindow]::SendMessage($hwnd, $created, [IntPtr]::Zero, [IntPtr]::Zero)
         if ([ThemeWindow]::TaskbarProperty($hwnd, 3) -cne ($app + ',-101')) { throw 'Taskbar icon not restored' }
