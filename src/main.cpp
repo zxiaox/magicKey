@@ -7,11 +7,12 @@
 #include "key_output.hpp"
 #include "localization.hpp"
 #include "key_capture.hpp"
+#include "toggle_hotkey.hpp"
 #include "updater.hpp"
 #include "theme_ui.hpp"
 
 using namespace mywarkey;
-constexpr UINT PauseMessage = WM_APP + 1, InputError = WM_APP + 2, CapturedKey = WM_APP + 3, UpdateFinished = WM_APP + 4;
+constexpr UINT ToggleMessage = WM_APP + 1, InputError = WM_APP + 2, CapturedKey = WM_APP + 3, UpdateFinished = WM_APP + 4;
 enum ControlId { ProfileBox = 101, NewProfile, RenameProfile, DeleteProfile, ProfileName,
     MappingList, SourceBox, TargetBox, AddMapping, RemoveMapping, BlockWindows, Toggle, LanguageBox, ScanCodes, DisableTarget, CheckUpdates, ThemeBox, SectionProfile, SectionMappings };
 constexpr wchar_t ClassName[] = L"mywarkey.Portable.Window";
@@ -144,34 +145,28 @@ LRESULT CALLBACK keyboardProc(int code, WPARAM message, LPARAM value) {
     // Never remap injected events: A -> Q, Q -> A must not recurse.
     if (key.flags & LLKHF_INJECTED) return CallNextHookEx(nullptr, code, message, value);
     static std::array<bool, 256> physical{};
-    static bool emergencyHeld = false;
+    static ToggleHotkey toggleHotkey;
     bool down = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;
     int source = sourceKey(key);
     if (source < 1 || source > 254) return CallNextHookEx(nullptr, code, message, value);
     bool wasDown = physical[source];
     physical[source] = down;
-    if (source == VK_F12) {
-        if (down && (physical[VK_LCONTROL] || physical[VK_RCONTROL]) &&
-            (physical[VK_LMENU] || physical[VK_RMENU])) {
-            emergencyHeld = true;
-            {
-                std::lock_guard<std::mutex> lock(engineMutex);
-                liveEnabled = false;
+    auto shortcut = toggleHotkey.event(source, down, wasDown,
+        physical[VK_LCONTROL] || physical[VK_RCONTROL], physical[VK_LMENU] || physical[VK_RMENU]);
+    if (shortcut.swallow) {
+        {
+            std::lock_guard<std::mutex> lock(engineMutex);
+            if (shortcut.toggle) {
+                liveEnabled = !liveEnabled;
+                inputFailed = false;
                 capture.cancel();
                 ++captureGeneration;
                 engine.release(sendKey);
             }
-            PostMessageW(window, PauseMessage, 0, 0);
-            return 1;
+            if (!down) capture.event(source, false, wasDown);
         }
-        if (emergencyHeld) {
-            if (!down) {
-                emergencyHeld = false;
-                std::lock_guard<std::mutex> lock(engineMutex);
-                capture.event(source, false, wasDown);
-            }
-            return 1;
-        }
+        if (shortcut.toggle) PostMessageW(window, ToggleMessage, 0, 0);
+        return 1;
     }
     bool swallowed;
     {
@@ -552,7 +547,9 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
             if (LOWORD(w) == WA_INACTIVE) cancelCapture();
             if (LOWORD(w) != WA_INACTIVE) { std::lock_guard<std::mutex> lock(engineMutex); engine.release(sendKey); }
             return 0;
-        case PauseMessage: cancelCapture(); enabled = false; syncEngine(); refresh(); return 0;
+        case ToggleMessage:
+            { std::lock_guard<std::mutex> lock(engineMutex); enabled = liveEnabled; }
+            refresh(); return 0;
         case InputError:
             enabled = false; syncEngine(); refresh();
             error(L"Windows could not send a remapped key. Remapping is paused. If the target app runs as administrator, run MagicKey at the same privilege level.");

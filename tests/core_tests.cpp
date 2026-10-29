@@ -2,6 +2,7 @@
 #include "../src/key_output.hpp"
 #include "../src/localization.hpp"
 #include "../src/key_capture.hpp"
+#include "../src/toggle_hotkey.hpp"
 #include <iostream>
 #include <sstream>
 #include <utility>
@@ -9,6 +10,26 @@
 void require(bool value) { if (!value) throw std::runtime_error("Test failed"); }
 int main() {
     using namespace mywarkey;
+    // The reserved physical chord toggles once per press, even if modifiers
+    // are released before F12. Plain/repeated F12 must not start the chord.
+    ToggleHotkey shortcut;
+    require(!shortcut.event(0x7B, true, false, true, false).swallow);
+    require(!shortcut.event(0x7B, true, true, true, true).toggle);
+    require(!shortcut.event(0x7B, false, true, true, true).swallow);
+    bool active = true;
+    auto press = shortcut.event(0x7B, true, false, true, true);
+    require(press.swallow && press.toggle); active = !active; require(!active);
+    for (int i = 0; i < 20; ++i) {
+        auto repeat = shortcut.event(0x7B, true, true, true, true);
+        require(repeat.swallow && !repeat.toggle);
+    }
+    require(!shortcut.event('A', true, false, true, true).swallow);
+    auto release = shortcut.event(0x7B, false, true, false, false);
+    require(release.swallow && !release.toggle);
+    press = shortcut.event(0x7B, true, false, true, true);
+    require(press.toggle); active = !active; require(active);
+    require(shortcut.event(0x7B, false, true, true, true).swallow);
+    require(!shortcut.event(0x7B, true, false, false, false).swallow);
     Settings settings;
     require(settings.profiles[0].mappings == std::map<int, int>{{0x67, 'Q'}, {0x68, 'W'}, {0x65, 'R'}});
     require(settings.scanCodes && settings.language == 0);

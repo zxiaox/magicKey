@@ -14,7 +14,7 @@ A portable, native Windows keyboard remapper. No installer, Python, .NET, servic
 - Create, rename, and delete profiles; add, update, and remove mappings.
 - Disable individual keys by selecting **Disabled** as their destination.
 - Disable both Windows keys with a per-profile checkbox. This takes priority over mappings from those keys.
-- Start enabled with the selected profile; pause or resume using the main button. **Ctrl + Alt + F12** always pauses, including when those keys are remapped.
+- Start enabled with the selected profile; pause or resume using the main button. **Ctrl + Alt + F12** toggles enabled/paused, including when those keys are remapped.
 - Release held output keys on pause, profile changes, edits, and normal exit.
 - Run minimized while remapping remains active. Closing the window stops remapping.
 
@@ -81,13 +81,13 @@ For manual recovery, close MagicKey, rename `MagicKey.exe.backup` to `MagicKey.e
 3. To create a profile, type a unique name in **Profile name** and click **New**. It starts with **Q → Numpad 7**, **W → Numpad 8**, and **R → Numpad 5**. You can edit or remove these mappings. To rename the selected profile, edit its name and click **Rename**. Switching profiles applies the saved mappings immediately if remapping is enabled.
 4. Check **Disable both Windows keys** if desired.
 5. Switch to the application where you want to use it. If you paused remapping, click **Enable remapping** first. Remapping deliberately bypasses the MagicKey editor so its controls stay usable.
-6. Press **Ctrl + Alt + F12** to pause from another application, or close MagicKey to stop.
+6. Press **Ctrl + Alt + F12** to toggle remapping from another application, or close MagicKey to stop.
 
 Changes save automatically to `mywarkey.profiles` beside the executable. Keep that file with the executable when moving between computers. Saving uses a temporary file followed by replacement; save failures are reported and the previous settings remain active. Invalid profile files are preserved and reported on startup rather than overwritten. Enable/pause state is never persisted.
 
 Use the **Settings → Language** menu to change the interface. UI labels, key names, status messages, and application dialogs are translated. Standard message-box buttons follow the Windows display language. Letters, punctuation, function-key names, and your own profile names are unchanged. The Windows build uses UTF-8 source encoding for all four languages.
 
-During capture, the active button says **Press a key...**. Click it again to cancel, click the other key button to switch sides, or switch away from MagicKey to cancel. The first newly pressed key is accepted when you release it; held-key repeats do not create additional captures. Enter, Tab, Escape, modifiers, and Windows keys can be captured without activating the interface. Ctrl + Alt + F12 keeps its emergency-pause behavior. Captured keys and their releases are consumed, and remapping resumes its normal behavior in other apps after leaving the editor.
+During capture, the active button says **Press a key...**. Click it again to cancel, click the other key button to switch sides, or switch away from MagicKey to cancel. The first newly pressed key is accepted when you release it; held-key repeats do not create additional captures. Enter, Tab, Escape, modifiers, and Windows keys can be captured without activating the interface. Ctrl + Alt + F12 keeps its toggle behavior. Captured keys and their releases are consumed, and remapping resumes its normal behavior in other apps after leaving the editor.
 
 Number labels distinguish **Top row 7** from **Numpad 7**, and likewise for every digit 0–9. Capture recognizes the physical numpad digits and decimal key with Num Lock either on or off, separately from Home, End, Delete, and the arrow cluster. Numpad Enter still shares the regular Enter mapping.
 
@@ -121,7 +121,7 @@ References: Microsoft's [KEYBDINPUT scan-code behavior](https://learn.microsoft.
 - Keep **Num Lock on** when sending numeric keypad digits. Top-row `7` and `Numpad 7` are separate choices. Numpad input keys are recognized independently of Num Lock. Numpad Enter shares the regular Enter setting.
 - Mappings send key events, not fixed text. The active keyboard layout, Shift, Caps Lock, and the receiving app determine the resulting character. Punctuation labels describe a US keyboard.
 - Mappings apply globally across applications and keyboards, except in the editor. They are direct: with A → Q and Q → Z, pressing A sends Q. Repeated presses and key-up events are forwarded; keys mapped to the same destination share its held state.
-- The emergency chord uses physical Ctrl, Alt, and F12. It is reserved for pausing and takes precedence over mappings. Both left and right Ctrl/Alt work.
+- The toggle chord uses physical Ctrl, Alt, and F12. It switches enabled/paused once per F12 press, ignores held-key repeats, and takes precedence over mappings. Both left and right Ctrl/Alt work.
 - Apps running as administrator may require MagicKey to run as administrator too. Windows restricts `SendInput` to apps at the same or lower integrity level. A detectable injection failure pauses remapping and reports the problem.
 - Secure screens, Ctrl + Alt + Delete, games that reject synthetic input, and anti-cheat protected applications are outside the app's control. Do not assume compatibility with every game.
 - The app uses a dedicated low-level keyboard-hook thread and ignores injected events to prevent remapping loops. It does not log keystrokes or alter system keyboard settings. Network access happens only when you click Check for updates or approve a download.
@@ -144,4 +144,4 @@ Implementation references: [LowLevelKeyboardProc](https://learn.microsoft.com/en
 
 Updater tests additionally cover strict numeric versions, malformed release metadata, draft/prerelease rejection, trusted repository URLs, exact asset selection, size limits, checksum parsing, x64 PE identification, and Windows command-line quoting. The Windows helper integration test runs in CI; game compatibility and translated interface layout still require a real Windows smoke test.
 
-Theme tests cover all four preference values, malformed appearance files, and text contrast. Windows UI tests switch each theme through its real menu, restart the app, verify startup is enabled, emergency pause works, saved menu selections persist, the app icon is present, and the background artwork renders, ensure profiles remain byte-identical, and capture screenshots for all four language/theme combinations.
+Theme tests cover all four preference values, malformed appearance files, and text contrast. Windows UI tests switch each theme through its real menu, restart the app, verify startup is enabled, pause/resume works, saved menu selections persist, the app icon is present, and the background artwork renders, ensure profiles remain byte-identical, and capture screenshots for all four language/theme combinations.

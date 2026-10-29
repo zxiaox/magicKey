@@ -140,7 +140,7 @@ void ThemeUI::paint(HDC dc, const RECT& bounds, bool enabled, int language) cons
     const auto subtitle = std::wstring(L"v") + MAGICKEY_VERSION_W + L"  /  " + tr(L"Portable keyboard control");
     text(dc, subtitle.c_str(), {94,64,550,86}, smallFont, p.muted);
     line(dc, 44, 377, 250, 377, p.border);
-    text(dc, tr(L"Emergency pause"), {44,495,250,515}, smallFont, p.muted);
+    text(dc, tr(L"Toggle remapping"), {44,495,250,515}, smallFont, p.muted);
     roundBox(dc, {44,523,250,557}, p.control, p.border, 8);
     text(dc, L"Ctrl + Alt + F12", {44,523,250,557}, strongFont, p.accent, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     text(dc, tr(L"Profiles save automatically."), {44,565,250,583}, smallFont, p.muted);
