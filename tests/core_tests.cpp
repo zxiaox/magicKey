@@ -51,6 +51,10 @@ int main() {
     require(warcraftExecutable(L"War3.exe") && warcraftExecutable(L"Warcraft III.exe"));
     require(warcraftExecutable(L"WARCRAFT III REFORGED.EXE"));
     require(!warcraftExecutable(L"notepad.exe") && !warcraftExecutable(L"War3.exe.bak"));
+    require(warcraftWindowClass(L"Warcraft III") && warcraftWindowClass(L"WarcraftIII"));
+    require(warcraftWindowClass(L"WARCRAFT III"));
+    require(!warcraftWindowClass(L"Notepad") && !warcraftWindowClass(L"OsWindow"));
+    require(!warcraftWindowClass(L"Qt5QWindowIcon") && !warcraftWindowClass(L"Warcraft III Launcher"));
     require(configurationMessage(L"测试 日本語 한국어") == L"Configuration 测试 日本語 한국어 enabled.");
     require(configurationMessage(L"a\n|b") == L"Configuration a  b enabled.");
     require(toggleMessage(true) == L"magicKey enabled." && toggleMessage(false) == L"magicKey disabled.");

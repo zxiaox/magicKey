@@ -1,10 +1,10 @@
 Portable MagicKey for Windows 10/11 x64. End users do not need Visual Studio or an installer.
 
-New in this version: corrected Warcraft chat notifications to use **Enter → message → Enter**, without an initial Escape. Enter is now held for 80 ms so a game's input polling can observe it. English text uses regular keyboard scan codes; non-Latin profile names retain Unicode fallback. Focus-change cancellation pairs any held Enter with its release.
+New in this version: fixed classic Warcraft detection when Windows blocks reading the foreground process name or a launcher uses a renamed executable. MagicKey can now recognize the exact classic Warcraft window classes **Warcraft III** and **WarcraftIII** without opening the process. A matching window title alone is insufficient.
 
-Added **Settings → Notification diagnostics** to report unrecognized foreground processes, shortcut-release timeouts, focus changes, and blocked Windows input. A successful input submission does not prove that Warcraft accepted chat; actual game verification remains necessary.
+**Settings → Notification diagnostics** now includes the last foreground window class, title, process ID, readable executable name, and numeric Windows query error. Query failure is no longer reported as an assumed administrator mismatch. Actual Windows input restrictions remain separate from game recognition.
 
-Use notification shortcuts during gameplay with chat closed. An already-open chat draft can be submitted by the opening Enter. Profiles, themes and shortcuts are preserved.
+The Enter → message → Enter sequence, timed presses, profiles, themes, and shortcuts are preserved. Use notification shortcuts during gameplay with chat closed.
 
 Download **MagicKey-windows-x64-portable.zip**, extract it into a writable folder, and run **MagicKey.exe**. The executable is also available separately for existing installations and the in-app updater. The source-code archives are intended for developers.
 

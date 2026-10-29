@@ -33,6 +33,13 @@ inline bool warcraftExecutable(std::wstring_view name) {
     for (auto& c : lower) if (c >= L'A' && c <= L'Z') c += L'a' - L'A';
     return lower == L"war3.exe" || lower == L"warcraft iii.exe" || lower == L"warcraft iii reforged.exe";
 }
+// Classic Warcraft builds expose a distinctive native window class even when
+// a compatibility wrapper blocks process-image queries or renames the binary.
+inline bool warcraftWindowClass(std::wstring_view name) {
+    std::wstring lower(name);
+    for (auto& c : lower) if (c >= L'A' && c <= L'Z') c += L'a' - L'A';
+    return lower == L"warcraft iii" || lower == L"warcraftiii";
+}
 inline std::wstring configurationMessage(std::wstring name) {
     if (name.size() > 80) name.resize(80);
     for (auto& c : name) if (c < 32 || c == L'|' || c == 127) c = L' ';

@@ -8,13 +8,29 @@ DWORD warcraftProcess(HWND window, std::wstring& name) {
     DWORD pid = 0;
     if (!window || GetForegroundWindow() != window) { name = L"No matching foreground window"; return 0; }
     GetWindowThreadProcessId(window, &pid);
+    if (!pid) { name = L"Foreground window has no process ID"; return 0; }
+    wchar_t className[256]{}, title[512]{};
+    GetClassNameW(window, className, int(std::size(className)));
+    GetWindowTextW(window, title, int(std::size(title)));
+    std::wstring executable;
+    DWORD queryError = ERROR_SUCCESS;
     HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (!process) { name = L"Cannot inspect foreground process (check administrator privileges)"; return 0; }
-    wchar_t path[32768]; DWORD length = DWORD(std::size(path));
-    bool valid = QueryFullProcessImageNameW(process, 0, path, &length);
-    name = valid ? std::filesystem::path(std::wstring(path, length)).filename().wstring() : L"Unknown process";
-    CloseHandle(process);
-    return valid && warcraftExecutable(name) ? pid : 0;
+    if (process) {
+        wchar_t path[32768]; DWORD length = DWORD(std::size(path));
+        if (QueryFullProcessImageNameW(process, 0, path, &length))
+            executable = std::filesystem::path(std::wstring(path, length)).filename().wstring();
+        else queryError = GetLastError();
+        CloseHandle(process);
+    } else queryError = GetLastError();
+    const bool byProcess = warcraftExecutable(executable);
+    const bool byClass = warcraftWindowClass(className);
+    // A window title alone (or a generic Qt/OsWindow class) is not enough.
+    // The class fallback needs no handle to the protected game process.
+    name = L"PID " + std::to_wstring(pid) + L"; class: " + className + L"; title: " + title;
+    if (!executable.empty()) name += L"; executable: " + executable;
+    if (queryError) name += L"; process query error: " + std::to_wstring(queryError);
+    if (byClass && !byProcess) name += L"; recognized by classic Warcraft window class";
+    return byProcess || byClass ? pid : 0;
 }
 INPUT scanInput(WORD scan, bool down) {
     INPUT i{}; i.type = INPUT_KEYBOARD; i.ki.wScan = scan & 0xFF;
@@ -70,6 +86,7 @@ bool GameNotifications::text() {
 void GameNotifications::queue(HWND game, std::wstring message) {
     std::wstring name;
     DWORD pid = warcraftProcess(game, name);
+    targetDescription = name;
     if (!pid) { report = L"Not sent: Warcraft was not recognized as the foreground game.\nForeground: " + name; return; }
     if (target) cancel();
     target = game; process = pid; pending = std::move(message);

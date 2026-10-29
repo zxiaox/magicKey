@@ -45,15 +45,34 @@ void alt(bool down) {
 }
 int main() {
     try {
-        WNDCLASSW wc{}; wc.lpfnWndProc = receiver; wc.lpszClassName = L"MagicKey.Notification.Test"; wc.hInstance = GetModuleHandleW(nullptr);
+        WNDCLASSW wc{}; wc.lpfnWndProc = receiver;
+#ifdef MAGICKEY_WINDOW_FALLBACK_TEST
+        wc.lpszClassName = L"Warcraft III";
+#else
+        wc.lpszClassName = L"MagicKey.Notification.Test";
+#endif
+        wc.hInstance = GetModuleHandleW(nullptr);
         RegisterClassW(&wc);
         HWND game = CreateWindowW(wc.lpszClassName, L"Notification input receiver", WS_OVERLAPPEDWINDOW, 100,100,600,300,nullptr,nullptr,wc.hInstance,nullptr);
         ShowWindow(game, SW_SHOW); SetForegroundWindow(game);
         GameNotifications notifications;
         pump(notifications, 200);
         require(GetForegroundWindow() == game, "Test window could not become foreground");
+#ifdef MAGICKEY_WINDOW_FALLBACK_TEST
+        // A title alone must not identify an unrelated foreground app.
+        WNDCLASSW ordinary = wc; ordinary.lpszClassName = L"MagicKey.Ordinary.Test";
+        RegisterClassW(&ordinary);
+        HWND spoofTitle = CreateWindowW(ordinary.lpszClassName, L"Warcraft III", WS_OVERLAPPEDWINDOW, 200,200,500,200,nullptr,nullptr,wc.hInstance,nullptr);
+        ShowWindow(spoofTitle, SW_SHOW); SetForegroundWindow(spoofTitle); pump(notifications, 100);
+        notifications.queue(spoofTitle, L"must not send to title-only match"); pump(notifications, 100);
+        require(!notifications.readyToStart() && notifications.diagnostics().find(L"not recognized") != std::wstring::npos, "Title-only window was recognized");
+        DestroyWindow(spoofTitle); SetForegroundWindow(game); pump(notifications, 100);
+#endif
         alt(true); pump(notifications, 50);
         notifications.queue(game, L"Configuration 测试 日本語 한국어 enabled.");
+#ifdef MAGICKEY_WINDOW_FALLBACK_TEST
+        require(notifications.diagnostics().find(L"recognized by classic Warcraft window class") != std::wstring::npos, "Classic class fallback was not used");
+#endif
         pump(notifications, 300);
         require(submitted.empty() && !notifications.typing(), "Sent while Alt was held");
         alt(false); pump(notifications, 900);
