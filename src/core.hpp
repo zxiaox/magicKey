@@ -8,12 +8,15 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <cstdint>
+#include "combination.hpp"
 
 namespace mywarkey {
 struct Profile {
     std::string name;
     bool blockWindows = false;
     std::map<int, int> mappings; // 0 means disable the source key.
+    std::vector<Combination> combinations;
 };
 inline std::map<int, int> defaultMappings() {
     return {{0x67, 'Q'}, {0x68, 'W'}, {0x65, 'R'}}; // Numpad 7, 8, 5.
@@ -23,6 +26,7 @@ inline Profile newProfile(std::string name) {
 }
 struct Settings {
     std::size_t selected = 0;
+    int quickChatSlot = 0;
     int language = 0; // English, Simplified Chinese, Japanese, Korean.
     bool scanCodes = true;
     bool blockWindows = false;
@@ -36,7 +40,7 @@ inline Settings readSettings(std::istream& in) {
     int version;
     std::size_t count;
     if (!(in >> magic >> version >> result.selected >> count) || magic != "MYWARKEY" ||
-        (version < 1 || version > 3) || count == 0 || count > 100)
+        (version < 1 || version > 4) || count == 0 || count > 100)
         throw std::runtime_error("Invalid profile file header.");
     if (version >= 2) {
         int scanCodes;
@@ -50,6 +54,8 @@ inline Settings readSettings(std::istream& in) {
         if (!(in >> blocked) || (blocked != 0 && blocked != 1)) throw std::runtime_error("Invalid global Windows-key setting.");
         result.blockWindows = blocked != 0;
     }
+    if (version >= 4 && (!(in >> result.quickChatSlot) || result.quickChatSlot < 0 || result.quickChatSlot > 9))
+        throw std::runtime_error("Invalid Quick Chat slot.");
     result.profiles.clear();
     for (std::size_t i = 0; i < count; ++i) {
         Profile p;
@@ -68,6 +74,19 @@ inline Settings readSettings(std::istream& in) {
             if (!(in >> from >> to) || from < 1 || from > 254 || to < 0 || to > 254 ||
                 !p.mappings.emplace(from, to).second)
                 throw std::runtime_error("Invalid key mapping.");
+        }
+        if (version >= 4) {
+            int count;
+            if (!(in >> count) || count < 0 || count > 100) throw std::runtime_error("Invalid combination count.");
+            for (int n = 0; n < count; ++n) {
+                int length; Combination c;
+                if (!(in >> length) || length < 2 || length > 3) throw std::runtime_error("Invalid combination size.");
+                for (int k = 0, key; k < length; ++k) { if (!(in >> key)) throw std::runtime_error("Invalid combination key."); c.keys.push_back(key); }
+                c.keys = combinationKeys(std::move(c.keys));
+                if (!(in >> c.target) || c.target < 0 || c.target > 254) throw std::runtime_error("Invalid combination target.");
+                for (const auto& old : p.combinations) if (old.keys == c.keys) throw std::runtime_error("Duplicate combination.");
+                p.combinations.push_back(std::move(c));
+            }
         }
         result.profiles.push_back(std::move(p));
     }
@@ -92,11 +111,16 @@ inline Settings readSettings(std::istream& in) {
 }
 
 inline void writeSettings(std::ostream& out, const Settings& settings) {
-    out << "MYWARKEY 3 " << settings.selected << ' ' << settings.profiles.size() << ' '
-        << settings.language << ' ' << settings.scanCodes << ' ' << settings.blockWindows << '\n';
+    out << "MYWARKEY 4 " << settings.selected << ' ' << settings.profiles.size() << ' '
+        << settings.language << ' ' << settings.scanCodes << ' ' << settings.blockWindows << ' ' << settings.quickChatSlot << '\n';
     for (const auto& p : settings.profiles) {
         out << std::quoted(p.name) << ' ' << p.blockWindows << ' ' << p.mappings.size() << '\n';
         for (auto [from, to] : p.mappings) out << from << ' ' << to << '\n';
+        out << p.combinations.size() << '\n';
+        for (const auto& c : p.combinations) {
+            out << c.keys.size(); for (int key : c.keys) out << ' ' << key;
+            out << ' ' << c.target << '\n';
+        }
     }
     out << "QUICKCHAT 10\n";
     for (const auto& message : settings.quickChat) out << std::quoted(message) << '\n';
@@ -117,38 +141,97 @@ inline void writeTemporary(const std::filesystem::path& path, const Settings& se
 class Remapper {
     std::map<int, int> held;
     std::array<unsigned, 256> references{};
-public:
-    template<class Sink>
-    bool event(int source, bool down, const Profile& profile, bool enabled, Sink&& send) {
-        auto active = held.find(source);
+    std::vector<int> pending;
+    std::vector<Combination> active;
+    std::uint64_t deadline = 0;
+    bool contains(const std::vector<int>& keys, int key) const { return std::find(keys.begin(),keys.end(),key) != keys.end(); }
+    bool allowed(const Combination& c, const Profile& p) const { return !p.blockWindows || (!contains(c.keys,0x5B) && !contains(c.keys,0x5C)); }
+    template<class Sink> void start(int target, Sink& send) { if (target && references[target]++ == 0) send(target,true); }
+    template<class Sink> void stop(int target, Sink& send) { if (target && references[target] && --references[target] == 0) send(target,false); }
+    template<class Sink> bool normal(int source, bool down, const Profile& p, bool enabled, Sink& send, bool force = false) {
+        auto found = held.find(source);
         if (!down) {
-            if (active == held.end()) return false;
-            const int target = active->second;
-            held.erase(active);
-            if (target && --references[target] == 0) send(target, false);
-            return true;
+            if (found == held.end()) return false;
+            stop(found->second,send); held.erase(found); return true;
         }
-        if (active != held.end()) {
-            if (active->second) send(active->second, true);
-            return true;
-        }
+        if (found != held.end()) { if (found->second) send(found->second,true); return true; }
         if (!enabled) return false;
-        auto mapping = profile.mappings.find(source);
+        auto mapping = p.mappings.find(source);
         int target;
-        if (profile.blockWindows && (source == 0x5B || source == 0x5C)) target = 0;
-        else if (mapping != profile.mappings.end()) target = mapping->second;
+        if (p.blockWindows && (source == 0x5B || source == 0x5C)) target = 0;
+        else if (mapping != p.mappings.end()) target = mapping->second;
+        else if (force) target = source;
         else return false;
-        held[source] = target;
-        if (target && references[target]++ == 0) send(target, true);
-        return true;
+        held[source] = target; start(target,send); return true;
     }
-    template<class Sink>
-    void release(Sink&& send) {
-        for (int k = 1; k < 256; ++k)
-            if (references[k]) send(k, false);
+    const Combination* complete(const Profile& p) const {
+        const Combination* best = nullptr;
+        for (const auto& c : p.combinations) if (allowed(c,p)) {
+            bool full = true;
+            for (int key : c.keys) if (!contains(pending,key)) full = false;
+            if (full && (!best || c.keys.size() > best->keys.size())) best = &c;
+        }
+        return best;
+    }
+    bool extendable(const Profile& p, const std::vector<int>& keys) const {
+        for (const auto& c : p.combinations) if (allowed(c,p)) {
+            bool all = true; for (int key : keys) if (!contains(c.keys,key)) all = false;
+            if (all) return true;
+        }
+        return false;
+    }
+    template<class Sink> void resolve(const Profile& p, Sink& send) {
+        auto chosen = complete(p);
+        if (chosen) {
+            active.push_back(*chosen); start(chosen->target,send);
+            for (int key : chosen->keys) held[key] = 0;
+            for (int key : pending) if (!contains(chosen->keys,key)) normal(key,true,p,true,send,true);
+        } else for (int key : pending) normal(key,true,p,true,send,true);
+        pending.clear();
+    }
+public:
+    static constexpr std::uint64_t CombinationWindowMs = 150;
+    template<class Sink> void tick(std::uint64_t now, const Profile& p, bool enabled, Sink&& send) {
+        if (enabled && !pending.empty() && now >= deadline) resolve(p,send);
+    }
+    template<class Sink> bool event(int source, bool down, const Profile& p, bool enabled, Sink&& send, std::uint64_t now = 0) {
+        if (!enabled && !pending.empty()) release(send);
+        tick(now,p,enabled,send);
+        if (!down) {
+            bool owned = contains(pending,source);
+            if (owned) resolve(p,send);
+            for (auto i = active.begin(); i != active.end();) {
+                if (contains(i->keys,source)) { stop(i->target,send); i = active.erase(i); owned = true; }
+                else ++i;
+            }
+            return normal(source,false,p,enabled,send) || owned;
+        }
+        if (held.count(source)) return normal(source,true,p,enabled,send);
+        if (contains(pending,source)) return true;
+        if (!enabled) return false;
+        std::vector<int> candidate = pending; candidate.push_back(source);
+        if (!pending.empty() && !extendable(p,candidate)) { resolve(p,send); candidate = {source}; }
+        if (extendable(p,candidate)) {
+            if (pending.empty()) deadline = now + CombinationWindowMs;
+            pending.push_back(source);
+            if (auto chosen = complete(p)) {
+                bool longer = false;
+                for (const auto& c : p.combinations) if (allowed(c,p) && c.keys.size() > chosen->keys.size()) {
+                    bool superset = true; for (int key : pending) if (!contains(c.keys,key)) superset = false;
+                    if (superset) longer = true;
+                }
+                if (!longer) resolve(p,send);
+            }
+            return true;
+        }
+        return normal(source,true,p,true,send);
+    }
+    template<class Sink> void release(Sink&& send) {
+        for (int key = 1; key < 256; ++key) if (references[key]) send(key,false);
         references.fill(0);
-        // Continue swallowing held source keys until their physical release, including repeats.
         for (auto& entry : held) entry.second = 0;
+        for (int key : pending) held[key] = 0;
+        pending.clear(); active.clear();
     }
 };
 } // namespace mywarkey

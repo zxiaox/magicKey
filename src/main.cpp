@@ -20,6 +20,14 @@ constexpr UINT ToggleMessage = WM_APP + 1, InputError = WM_APP + 2, CapturedKey 
 enum ControlId { ProfileBox = 101, NewProfile, RenameProfile, DeleteProfile, ProfileName,
     MappingList, SourceBox, TargetBox, AddMapping, RemoveMapping, BlockWindows, Toggle, LanguageBox, ScanCodes, DisableTarget, CheckUpdates, ThemeBox, SectionProfile, SectionMappings, NewMapping, QuickChatOpen };
 constexpr int NumpadBase = 300;
+constexpr int ComboList = 410, ComboFirst = 411, ComboSecond = 412, ComboThird = 413, ComboTarget = 414, ComboSave = 415, ComboNew = 416, ComboRemove = 417;
+HWND comboList;
+std::array<HWND,4> comboButtons{};
+std::array<int,3> comboSources{'A','B',0};
+int comboDestination = 'D', comboSelection = -1, comboCapture = -1;
+int quickEditingSlot = 0;
+bool quickLoading = false, quickDirty = false;
+HWND inputForeground = nullptr;
 constexpr wchar_t ClassName[] = L"mywarkey.Portable.Window";
 HWND window, profileBox, nameEdit, mappingList, sourceBox, targetBox, toggleButton, statusLabel, scanBox;
 std::vector<std::pair<HWND, std::wstring>> localizedControls;
@@ -229,9 +237,11 @@ LRESULT CALLBACK keyboardProc(int code, WPARAM message, LPARAM value) {
             PostMessageW(window, CapturedKey, WPARAM(captureGeneration),
                 MAKELPARAM(result.key, int(result.slot)));
         if (result.swallow) return 1;
+        HWND focused = GetForegroundWindow();
+        if (focused != inputForeground) { engine.release(sendKey); inputForeground = focused; }
         // Keep the profile editor usable even when a profile remaps typing keys.
         swallowed = engine.event(source, down, liveProfile,
-            liveEnabled && !notificationTyping.load() && !editorActive(), sendKey);
+            liveEnabled && !notificationTyping.load() && !editorActive(), sendKey, GetTickCount64());
     }
     return swallowed ? 1 : CallNextHookEx(nullptr, code, message, value);
 }
@@ -285,6 +295,7 @@ void refreshMenus() {
         AppendMenuW(themes, MF_STRING | (i == int(themeUI.theme()) ? MF_CHECKED : 0), ThemeMenu + i, tr(magickey::Themes[i].name));
     AppendMenuW(options, MF_POPUP, UINT_PTR(languages), tr(L"Language"));
     AppendMenuW(options, MF_POPUP, UINT_PTR(themes), tr(L"Theme"));
+    AppendMenuW(options, MF_STRING | (settings.scanCodes ? MF_CHECKED : 0), ScanCodes, tr(L"Game-compatible input (scan codes)"));
     AppendMenuW(options, MF_STRING | (settings.blockWindows ? MF_CHECKED : 0), BlockWindows, tr(L"Disable Windows keys"));
     AppendMenuW(options, MF_STRING, QuickChatOpen, tr(L"Quick Chat"));
     AppendMenuW(options, MF_SEPARATOR, 0, nullptr);
@@ -317,6 +328,12 @@ void updateCaptureButtons() {
     SetWindowTextW(targetBox, target.c_str());
     const auto& mappings = settings.profiles[settings.selected].mappings;
     SetWindowTextW(GetDlgItem(window, AddMapping), tr(editingSource >= 0 || mappings.count(sourceChoice) ? L"Update" : L"Add"));
+    for (int i = 0; i < 4; ++i) {
+        int value = i == 3 ? comboDestination : comboSources[i];
+        auto label = comboCapture == i && slot != CaptureSlot::None ? std::wstring(tr(L"Press a key...")) : value ? keyName(value) : std::wstring(L"-");
+        SetWindowTextW(comboButtons[i],label.c_str());
+    }
+    SetWindowTextW(GetDlgItem(window,ComboSave),tr(comboSelection >= 0 ? L"Update" : L"Add"));
     for (int i = 0; i < 6; ++i) {
         auto found = mappings.find(CustomNumpadKeys[i]);
         auto text = numpadEditing == i && slot == CaptureSlot::Target ? std::wstring(tr(L"Press a key...")) :
@@ -325,7 +342,7 @@ void updateCaptureButtons() {
     }
 }
 void cancelCapture() {
-    numpadEditing = -1;
+    numpadEditing = -1; comboCapture = -1;
     { std::lock_guard<std::mutex> lock(engineMutex); capture.cancel(); ++captureGeneration; }
     updateCaptureButtons();
 }
@@ -343,6 +360,7 @@ void beginUpdateCheck() {
     updateUpdateButton();
 }
 void refresh();
+bool saveQuickChat(bool clear = false, int nextSlot = -1);
 void finishUpdate() {
     using namespace magickey::updates;
     auto result = updateClient.take();
@@ -368,6 +386,7 @@ void finishUpdate() {
             break;
         }
         case Outcome::Downloaded:
+            if (quickChatWindow && quickDirty && !saveQuickChat()) { discardStaging(result.staging); return; }
             cancelCapture(); enabled = false; syncEngine();
             try { launchInstaller(result, settings.language); DestroyWindow(window); }
             catch (...) { discardStaging(result.staging); refresh(); error(failureMessage(Failure::Install)); }
@@ -378,7 +397,6 @@ void finishUpdate() {
 }
 void refresh() {
     for (const auto& entry : localizedControls) SetWindowTextW(entry.first, tr(entry.second.c_str()));
-    SendMessageW(scanBox, BM_SETCHECK, settings.scanCodes ? BST_CHECKED : BST_UNCHECKED, 0);
     refreshMenus();
     updateCaptureButtons();
     LVCOLUMNW column{}; column.mask = LVCF_TEXT;
@@ -396,6 +414,8 @@ void refresh() {
     const auto& p = settings.profiles[settings.selected];
     SetWindowTextW(nameEdit, wide(p.name).c_str());
     if (editorProfile != p.name) {
+        comboSelection = -1; comboSources = {'A','B',0}; comboDestination = 'D';
+        if (!p.combinations.empty()) { comboSelection = 0; const auto& c = p.combinations[0]; comboSources = {c.keys[0],c.keys[1],c.keys.size() == 3 ? c.keys[2] : 0}; comboDestination = c.target; }
         editorProfile = p.name; editingSource = -1; sourceChoice = 'A'; targetChoice = 'Q';
         for (auto [from, to] : p.mappings) if (!customNumpadKey(from)) { editingSource = sourceChoice = from; targetChoice = to; break; }
     }
@@ -413,6 +433,14 @@ void refresh() {
         ListView_SetItemText(mappingList, row, 1, target.data());
         if (from == editingSource) ListView_SetItemState(mappingList, row, LVIS_SELECTED, LVIS_SELECTED);
     }
+    SendMessageW(comboList,LB_RESETCONTENT,0,0);
+    for (const auto& c : p.combinations) {
+        std::wstring label;
+        for (int key : c.keys) { if (!label.empty()) label += L" + "; label += keyName(key); }
+        label += L"  \x2192  " + keyName(c.target);
+        SendMessageW(comboList,LB_ADDSTRING,0,LPARAM(label.c_str()));
+    }
+    SendMessageW(comboList,LB_SETCURSEL,comboSelection,0);
     refreshingMappings = false; updateCaptureButtons();
     RECT listBounds; GetClientRect(mappingList, &listBounds);
     ListView_SetColumnWidth(mappingList, 1, listBounds.right - ListView_GetColumnWidth(mappingList, 0));
@@ -433,57 +461,87 @@ std::string enteredName() {
     return utf8(name);
 }
 void makeInterface() {
-    control(L"STATIC", L"PROFILE", 0, SectionProfile, 44, 138, 206, 20);
-    profileBox = control(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, ProfileBox, 44, 166, 206, 300);
-    control(L"STATIC", L"Profile name", 0, 0, 44, 211, 206, 20);
-    nameEdit = control(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP, ProfileName, 44, 236, 206, 32);
-    SendMessageW(nameEdit, EM_SETLIMITTEXT, 80, 0);
-    control(L"BUTTON", L"New", WS_TABSTOP, NewProfile, 44, 280, 98, 32);
-    control(L"BUTTON", L"Rename", WS_TABSTOP, RenameProfile, 152, 280, 98, 32);
-    control(L"BUTTON", L"Delete", WS_TABSTOP, DeleteProfile, 44, 322, 206, 32);
-    control(L"STATIC", L"Custom Numeric Keypad", 0, 0, 310, 130, 420, 20);
+    control(L"STATIC",L"Configuration Schemes",0,SectionProfile,44,130,230,20);
+    profileBox = control(WC_COMBOBOXW,L"",CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP,ProfileBox,44,156,230,300);
+    control(L"STATIC",L"Profile name",0,0,286,130,240,20);
+    nameEdit = control(L"EDIT",L"",WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP,ProfileName,286,156,240,32);
+    SendMessageW(nameEdit,EM_SETLIMITTEXT,80,0);
+    control(L"BUTTON",L"New",WS_TABSTOP,NewProfile,540,156,86,32);
+    control(L"BUTTON",L"Rename",WS_TABSTOP,RenameProfile,636,156,104,32);
+    control(L"BUTTON",L"Delete",WS_TABSTOP,DeleteProfile,750,156,104,32);
+    control(L"STATIC",L"Custom Numeric Keypad",0,0,44,230,256,20);
     for (int i = 0; i < 6; ++i) {
-        int x = 310 + (i % 2) * 278, y = 160 + (i / 2) * 36;
-        std::wstring digit = std::to_wstring(CustomNumpadKeys[i] - VK_NUMPAD0) + L"  \x2192";
-        control(L"STATIC", digit.c_str(), 0, 0, x, y + 5, 45, 24);
-        // These numeric labels are fixed, so do not retain a temporary string.
-        localizedControls.pop_back();
-        numpadButtons[i] = control(L"BUTTON", L"", WS_TABSTOP, NumpadBase+i, x+50,y,208,30);
+        int x = 44 + (i % 2)*132, y = 264 + (i/2)*56;
+        auto digit = std::to_wstring(CustomNumpadKeys[i]-VK_NUMPAD0) + L" \x2192";
+        control(L"STATIC",digit.c_str(),0,0,x,y+9,28,24); localizedControls.pop_back();
+        numpadButtons[i] = control(L"BUTTON",L"",WS_TABSTOP,NumpadBase+i,x+32,y,92,40);
     }
-    control(L"STATIC", L"Key Mapping", 0, SectionMappings, 310, 294, 300, 20);
-    control(L"BUTTON", L"New mapping", WS_TABSTOP, NewMapping, 634, 288, 126, 30);
-    control(L"BUTTON", L"Remove", WS_TABSTOP, RemoveMapping, 766, 288, 88, 30);
-    mappingList = control(WC_LISTVIEWW, L"", LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_SHAREIMAGELISTS | WS_TABSTOP,
-        MappingList, 310, 326, 544, 116);
-    ListView_SetExtendedListViewStyle(mappingList, LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER);
-    rowImages = ImageList_Create(1, 32, ILC_COLOR32, 1, 0);
-    ListView_SetImageList(mappingList, rowImages, LVSIL_SMALL);
+    control(L"BUTTON",L"Quick Chat",WS_TABSTOP,QuickChatOpen,44,452,256,34);
+    control(L"STATIC",L"Alt + 1–0: Quick Chat",0,0,44,494,256,20);
+    control(L"STATIC",L"Key Mapping",0,SectionMappings,360,222,250,20);
+    control(L"BUTTON",L"New",WS_TABSTOP,NewMapping,666,216,88,30);
+    control(L"BUTTON",L"Remove",WS_TABSTOP,RemoveMapping,766,216,88,30);
+    control(L"STATIC",L"When you press",0,0,372,250,190,20);
+    control(L"STATIC",L"Send instead",0,0,584,250,250,20);
+    mappingList = control(WC_LISTVIEWW,L"",LVS_REPORT | LVS_NOCOLUMNHEADER | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_SHAREIMAGELISTS | WS_TABSTOP,MappingList,360,274,494,64);
+    ListView_SetExtendedListViewStyle(mappingList,LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER);
+    HWND tip = ListView_SetToolTips(mappingList,nullptr);
+    if (tip) DestroyWindow(tip);
+    ShowWindow(ListView_GetHeader(mappingList),SW_HIDE);
+    rowImages = ImageList_Create(1,30,ILC_COLOR32,1,0);
+    ListView_SetImageList(mappingList,rowImages,LVSIL_SMALL);
     LVCOLUMNW column{}; column.mask = LVCF_TEXT | LVCF_WIDTH;
-    column.pszText = const_cast<wchar_t*>(L"When you press"); column.cx = 212;
-    ListView_InsertColumn(mappingList, 0, &column);
-    column.pszText = const_cast<wchar_t*>(L"Send instead"); column.cx = 312;
-    ListView_InsertColumn(mappingList, 1, &column);
-    control(L"STATIC", L"From key", 0, 0, 310, 449, 155, 20);
-    control(L"STATIC", L"To key", 0, 0, 482, 449, 155, 20);
-    sourceBox = control(L"BUTTON", L"", WS_TABSTOP, SourceBox, 310, 474, 155, 34);
-    targetBox = control(L"BUTTON", L"", WS_TABSTOP, TargetBox, 482, 474, 155, 34);
-    control(L"BUTTON", L"Disabled", WS_TABSTOP, DisableTarget, 646, 474, 94, 34);
-    control(L"BUTTON", L"Add", WS_TABSTOP, AddMapping, 750, 474, 104, 34);
-    control(L"STATIC", L"Click a key button, then press and release a key. Click again to cancel.", 0, 0, 310, 516, 544, 32);
-    scanBox = control(L"BUTTON", L"Game-compatible input (scan codes)", BS_AUTOCHECKBOX | WS_TABSTOP,
-        ScanCodes, 310, 552, 544, 30);
-    control(L"BUTTON", L"Quick Chat", WS_TABSTOP, QuickChatOpen, 44, 403, 206, 34);
-    control(L"STATIC", L"Alt + 1–0: Quick Chat", 0, 0, 44, 447, 206, 30);
-    statusLabel = control(L"STATIC", L"", 0, 0, 58, 626, 590, 22);
-    SendMessageW(statusLabel, WM_SETFONT, WPARAM(font), TRUE);
-    toggleButton = control(L"BUTTON", L"", BS_DEFPUSHBUTTON | WS_TABSTOP, Toggle, 676, 620, 178, 32);
-    SendMessageW(profileBox, CB_SETITEMHEIGHT, WPARAM(-1), 28);
-    themeUI.apply(window, mappingList, themeUI.theme());
-    refresh();
+    column.pszText = const_cast<wchar_t*>(L"When you press"); column.cx = 212; ListView_InsertColumn(mappingList,0,&column);
+    column.pszText = const_cast<wchar_t*>(L"Send instead"); column.cx = 282; ListView_InsertColumn(mappingList,1,&column);
+    sourceBox = control(L"BUTTON",L"",WS_TABSTOP,SourceBox,360,352,132,30);
+    targetBox = control(L"BUTTON",L"",WS_TABSTOP,TargetBox,506,352,132,30);
+    control(L"BUTTON",L"Disabled",WS_TABSTOP,DisableTarget,650,352,90,30);
+    control(L"BUTTON",L"Add",WS_TABSTOP,AddMapping,750,352,104,30);
+    control(L"STATIC",L"Click a key, then press its replacement.",0,0,360,386,494,16);
+    control(L"STATIC",L"Multi-Key Combinations",0,0,360,428,270,20);
+    control(L"BUTTON",L"New",WS_TABSTOP,ComboNew,666,422,88,28);
+    control(L"BUTTON",L"Remove",WS_TABSTOP,ComboRemove,766,422,88,28);
+    comboList = control(L"LISTBOX",L"",LBS_NOTIFY | LBS_NOINTEGRALHEIGHT | WS_VSCROLL | WS_TABSTOP,ComboList,360,452,494,48);
+    comboButtons[0] = control(L"BUTTON",L"",WS_TABSTOP,ComboFirst,360,514,82,30);
+    comboButtons[1] = control(L"BUTTON",L"",WS_TABSTOP,ComboSecond,462,514,82,30);
+    comboButtons[2] = control(L"BUTTON",L"",WS_TABSTOP,ComboThird,564,514,82,30);
+    comboButtons[3] = control(L"BUTTON",L"",WS_TABSTOP,ComboTarget,672,514,74,30);
+    control(L"BUTTON",L"Add",WS_TABSTOP,ComboSave,758,514,96,30);
+    control(L"STATIC",L"Press 2–3 keys within 150 ms. Right-click the third key to clear it.",0,0,360,554,494,30);
+    statusLabel = control(L"STATIC",L"",0,0,58,626,590,22);
+    SendMessageW(statusLabel,WM_SETFONT,WPARAM(font),TRUE);
+    toggleButton = control(L"BUTTON",L"",WS_TABSTOP,Toggle,676,620,178,32);
+    SendMessageW(profileBox,CB_SETITEMHEIGHT,WPARAM(-1),28);
+    themeUI.apply(window,mappingList,themeUI.theme()); refresh();
 }
-void loadQuickChatSlot() {
-    int slot = int(SendMessageW(quickSlotBox, CB_GETCURSEL, 0, 0));
-    if (slot >= 0 && slot < 10) SetWindowTextW(quickTextEdit, wide(settings.quickChat[slot]).c_str());
+
+void loadQuickChatSlot(bool loadText = true) {
+    quickLoading = true;
+    SendMessageW(quickSlotBox,CB_RESETCONTENT,0,0);
+    for (int i = 0; i < 10; ++i) {
+        auto label = std::wstring(L"Alt + ") + (i == 9 ? L'0' : wchar_t(L'1'+i)) + L" — ";
+        auto text = wide(settings.quickChat[i]);
+        label += text.empty() ? tr(L"Not assigned") : text.substr(0,28);
+        SendMessageW(quickSlotBox,CB_ADDSTRING,0,LPARAM(label.c_str()));
+    }
+    SendMessageW(quickSlotBox,CB_SETCURSEL,quickEditingSlot,0);
+    if (loadText) SetWindowTextW(quickTextEdit,wide(settings.quickChat[quickEditingSlot]).c_str());
+    quickLoading = false;
+}
+bool saveQuickChat(bool clear, int nextSlot) {
+    KillTimer(quickChatWindow,88);
+    wchar_t value[121]{}; GetWindowTextW(quickTextEdit,value,121);
+    auto candidate = settings;
+    auto text = clear ? std::string{} : utf8(value);
+    if (text.size() > 512) { SetWindowTextW(GetDlgItem(quickChatWindow,405),tr(L"Quick Chat message is too long.")); return false; }
+    candidate.quickChat[quickEditingSlot] = text;
+    candidate.quickChatSlot = nextSlot >= 0 ? nextSlot : quickEditingSlot;
+    if (!commit(std::move(candidate))) { SetWindowTextW(GetDlgItem(quickChatWindow,405),tr(L"Not saved")); return false; }
+    bool changed = nextSlot >= 0 && nextSlot != quickEditingSlot;
+    quickEditingSlot = settings.quickChatSlot; quickDirty = false;
+    loadQuickChatSlot(clear || changed);
+    SetWindowTextW(GetDlgItem(quickChatWindow,405),tr(L"Saved"));
+    refresh(); return true;
 }
 LRESULT CALLBACK quickChatProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
     switch (message) {
@@ -499,15 +557,12 @@ LRESULT CALLBACK quickChatProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
             };
             child(L"STATIC", L"Quick Chat shortcut", 0, 0, 20,18,560,24);
             quickSlotBox = child(WC_COMBOBOXW,L"",CBS_DROPDOWNLIST | WS_TABSTOP,401,20,48,560,300);
-            for (int i = 0; i < 10; ++i) {
-                auto label = std::wstring(L"Alt + ") + (i == 9 ? L'0' : wchar_t(L'1' + i));
-                SendMessageW(quickSlotBox,CB_ADDSTRING,0,LPARAM(label.c_str()));
-            }
-            SendMessageW(quickSlotBox, CB_SETCURSEL, 0, 0);
+            quickEditingSlot = settings.quickChatSlot; quickDirty = false;
             child(L"STATIC", L"Message", 0, 0, 20,96,560,24);
             quickTextEdit = child(L"EDIT",L"",WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP,402,20,126,560,34);
             SendMessageW(quickTextEdit, EM_SETLIMITTEXT, 120, 0);
             child(L"STATIC", L"Saved messages send only while Warcraft is foreground. Use with chat closed.",0,0,20,177,560,48);
+            child(L"STATIC",L"Saved",0,405,20,244,280,24);
             child(L"BUTTON", L"Save", WS_TABSTOP,403,320,240,120,34);
             child(L"BUTTON", L"Clear", WS_TABSTOP,404,460,240,120,34);
             SendMessageW(quickSlotBox, CB_SETITEMHEIGHT, WPARAM(-1), 28);
@@ -515,20 +570,21 @@ LRESULT CALLBACK quickChatProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
         }
         case WM_COMMAND: {
             int id = LOWORD(w);
-            if (id == 401 && HIWORD(w) == CBN_SELCHANGE) { loadQuickChatSlot(); return 0; }
-            if (id == 403 || id == 404) {
-                int slot = int(SendMessageW(quickSlotBox, CB_GETCURSEL, 0, 0));
-                if (slot < 0 || slot >= 10) return 0;
-                wchar_t value[121]{}; GetWindowTextW(quickTextEdit, value, 121);
-                auto candidate = settings;
-                auto text = id == 404 ? std::string{} : utf8(value);
-                if (text.size() > 512) { MessageBoxW(hwnd,tr(L"Quick Chat message is too long."),L"MagicKey",MB_OK | MB_ICONWARNING); return 0; }
-                candidate.quickChat[slot] = text;
-                if (commit(std::move(candidate))) { loadQuickChatSlot(); refresh(); }
+            if (id == 402 && HIWORD(w) == EN_CHANGE && !quickLoading) {
+                quickDirty = true; SetWindowTextW(GetDlgItem(hwnd,405),tr(L"Saving..."));
+                SetTimer(hwnd,88,350,nullptr); return 0;
+            }
+            if (id == 401 && HIWORD(w) == CBN_SELCHANGE && !quickLoading) {
+                int next = int(SendMessageW(quickSlotBox,CB_GETCURSEL,0,0));
+                if (next >= 0 && next < 10 && !saveQuickChat(false,next)) SendMessageW(quickSlotBox,CB_SETCURSEL,quickEditingSlot,0);
                 return 0;
             }
+            if (id == 403 || id == 404) { saveQuickChat(id == 404); return 0; }
             break;
         }
+        case WM_TIMER:
+            if (w == 88) { KillTimer(hwnd,88); if (quickDirty) saveQuickChat(); }
+            return 0;
         case WM_MEASUREITEM: {
             auto item = reinterpret_cast<MEASUREITEMSTRUCT*>(l);
             if (item->CtlType == ODT_COMBOBOX) { item->itemHeight = 28; return TRUE; }
@@ -543,8 +599,8 @@ LRESULT CALLBACK quickChatProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
         case WM_ERASEBKGND: { RECT bounds; GetClientRect(hwnd,&bounds); FillRect(reinterpret_cast<HDC>(w),&bounds,themeUI.panel()); return 1; }
         case WM_CTLCOLORSTATIC: SetTextColor(reinterpret_cast<HDC>(w),magickey::color(themeUI.colors().text)); SetBkMode(reinterpret_cast<HDC>(w),TRANSPARENT); return LRESULT(themeUI.panel());
         case WM_CTLCOLOREDIT: case WM_CTLCOLORLISTBOX: SetTextColor(reinterpret_cast<HDC>(w),magickey::color(themeUI.colors().text)); SetBkColor(reinterpret_cast<HDC>(w),magickey::color(themeUI.colors().control)); return LRESULT(themeUI.input());
-        case WM_CLOSE: DestroyWindow(hwnd); return 0;
-        case WM_DESTROY: magickey::clearWindowIdentity(hwnd); quickChatWindow = nullptr; quickSlotBox = quickTextEdit = nullptr; return 0;
+        case WM_CLOSE: if (!quickDirty || saveQuickChat()) DestroyWindow(hwnd); return 0;
+        case WM_DESTROY: KillTimer(hwnd,88); magickey::clearWindowIdentity(hwnd); quickChatWindow = nullptr; quickSlotBox = quickTextEdit = nullptr; return 0;
     }
     return DefWindowProcW(hwnd,message,w,l);
 }
@@ -559,6 +615,12 @@ void openQuickChat() {
     ShowWindow(quickChatWindow,SW_SHOW); SetForegroundWindow(quickChatWindow);
 }
 void command(int id, int notification) {
+    if (id >= ComboFirst && id <= ComboTarget && notification == BN_CLICKED) {
+        int field = id-ComboFirst; bool again = comboCapture == field;
+        cancelCapture();
+        if (!again) { comboCapture = field; std::lock_guard<std::mutex> lock(engineMutex); engine.release(sendKey); capture.arm(CaptureSlot::Target); ++captureGeneration; }
+        updateCaptureButtons(); return;
+    }
     if (id >= NumpadBase && id < NumpadBase + 6 && notification == BN_CLICKED) {
         int index = id - NumpadBase;
         bool again = numpadEditing == index;
@@ -583,9 +645,33 @@ void command(int id, int notification) {
         updateCaptureButtons();
         return;
     }
-    if (id == ProfileName || (notification != BN_CLICKED && notification != CBN_SELCHANGE)) return;
+    if (id == ProfileName || (notification != BN_CLICKED && notification != CBN_SELCHANGE && notification != LBN_SELCHANGE)) return;
     cancelCapture();
     if (id >= ThemeMenu && id < ThemeMenu + 4) { changeTheme(id - ThemeMenu); return; }
+    if (id == ComboList && notification == LBN_SELCHANGE) {
+        int index = int(SendMessageW(comboList,LB_GETCURSEL,0,0));
+        const auto& list = settings.profiles[settings.selected].combinations;
+        if (index >= 0 && index < int(list.size())) { comboSelection = index; const auto& c = list[index]; comboSources = {c.keys[0],c.keys[1],c.keys.size()==3 ? c.keys[2] : 0}; comboDestination = c.target; updateCaptureButtons(); }
+        return;
+    }
+    if (id == ComboNew) { comboSelection = -1; comboSources = {'A','B',0}; comboDestination = 'D'; SendMessageW(comboList,LB_SETCURSEL,WPARAM(-1),0); updateCaptureButtons(); return; }
+    if (id == ComboSave || id == ComboRemove) {
+        auto candidate = settings; auto& list = candidate.profiles[candidate.selected].combinations;
+        if (id == ComboRemove) {
+            if (comboSelection < 0 || comboSelection >= int(list.size())) return;
+            list.erase(list.begin()+comboSelection); comboSelection = -1;
+        } else {
+            try {
+                std::vector<int> keys{comboSources[0],comboSources[1]}; if (comboSources[2]) keys.push_back(comboSources[2]);
+                keys = combinationKeys(std::move(keys));
+                for (int i = 0; i < int(list.size()); ++i) if (i != comboSelection && list[i].keys == keys) throw std::runtime_error("That combination already exists.");
+                if (comboSelection < 0 && list.size() >= 100) throw std::runtime_error("Too many combinations.");
+                if (comboSelection >= 0 && comboSelection < int(list.size())) list[comboSelection] = {keys,comboDestination};
+                else { list.push_back({keys,comboDestination}); comboSelection = int(list.size())-1; }
+            } catch (const std::exception& e) { error(wide(e.what())); return; }
+        }
+        commit(std::move(candidate)); refresh(); return;
+    }
     if (id == QuickChatOpen) { openQuickChat(); return; }
     if (id == NewMapping) { editingSource = -1; sourceChoice = 'A'; targetChoice = 'Q';
         while (sourceChoice < 'Z' && settings.profiles[settings.selected].mappings.count(sourceChoice)) ++sourceChoice;
@@ -674,19 +760,20 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
             if (item->CtlType == ODT_COMBOBOX) { themeUI.combo(item); return TRUE; }
             if (item->CtlType == ODT_BUTTON) {
                 auto role = magickey::ButtonRole::Secondary;
-                if (item->CtlID == Toggle || item->CtlID == AddMapping) role = magickey::ButtonRole::Primary;
+                if (item->CtlID == Toggle || item->CtlID == AddMapping || item->CtlID == ComboSave) role = magickey::ButtonRole::Primary;
                 if (item->CtlID == ScanCodes) role = magickey::ButtonRole::Checkbox;
-                if (item->CtlID == SourceBox || item->CtlID == TargetBox || (item->CtlID >= NumpadBase && item->CtlID < NumpadBase + 6)) role = magickey::ButtonRole::Key;
+                if (item->CtlID == SourceBox || item->CtlID == TargetBox || (item->CtlID >= NumpadBase && item->CtlID < NumpadBase + 6) || (item->CtlID >= ComboFirst && item->CtlID <= ComboTarget)) role = magickey::ButtonRole::Key;
                 CaptureSlot slot;
                 { std::lock_guard<std::mutex> lock(engineMutex); slot = capture.activeSlot(); }
                 bool listening = (slot == CaptureSlot::Source && item->CtlID == SourceBox) ||
-                    (slot == CaptureSlot::Target && ((numpadEditing < 0 && item->CtlID == TargetBox) || item->CtlID == NumpadBase + numpadEditing));
+                    (slot == CaptureSlot::Target && ((numpadEditing < 0 && item->CtlID == TargetBox) || item->CtlID == NumpadBase + numpadEditing || (comboCapture >= 0 && item->CtlID == ComboFirst+comboCapture)));
                 themeUI.ownerButton(item, role, listening, settings.scanCodes); return TRUE;
             }
             break;
         }
         case WM_CONTEXTMENU: {
             int id = GetDlgCtrlID(reinterpret_cast<HWND>(w));
+            if (id == ComboThird) { cancelCapture(); comboSources[2] = 0; updateCaptureButtons(); return 0; }
             if (id >= NumpadBase && id < NumpadBase + 6) {
                 cancelCapture();
                 HMENU menu = CreatePopupMenu();
@@ -739,6 +826,10 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
             bool current;
             { std::lock_guard<std::mutex> lock(engineMutex); current = unsigned(w) == captureGeneration; if (current) capture.cancel(); }
             if (current && GetForegroundWindow() == window) {
+                if (comboCapture >= 0) {
+                    if (comboCapture == 3) comboDestination = LOWORD(l); else comboSources[comboCapture] = LOWORD(l);
+                    comboCapture = -1; updateCaptureButtons(); return 0;
+                }
                 if (numpadEditing >= 0) {
                     int from = CustomNumpadKeys[numpadEditing], to = LOWORD(l);
                     numpadEditing = -1;
@@ -790,6 +881,7 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
                     std::lock_guard<std::mutex> lock(engineMutex);
                     engine.release(sendKey);
                 }
+                { std::lock_guard<std::mutex> lock(engineMutex); HWND focused = GetForegroundWindow(); if (focused != inputForeground) { engine.release(sendKey); inputForeground = focused; } engine.tick(GetTickCount64(),liveProfile,liveEnabled && !notificationTyping.load() && !editorActive(),sendKey); }
                 gameNotifications.tick();
                 notificationTyping = gameNotifications.typing();
             }
@@ -815,6 +907,7 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
             SetBkColor(reinterpret_cast<HDC>(w), magickey::color(themeUI.colors().control));
             return LRESULT(themeUI.input());
         case WM_CLOSE:
+            if (quickChatWindow && quickDirty && !saveQuickChat()) return 0;
             if (updateClient.busy()) {
                 cancelCapture(); enabled = false; syncEngine();
                 closeAfterUpdate = true; updateClient.cancel(); updateUpdateButton();

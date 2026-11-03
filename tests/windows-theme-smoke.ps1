@@ -121,6 +121,9 @@ try {
         if ([ThemeWindow]::GetDlgItem($hwnd, 300) -eq [IntPtr]::Zero -or [ThemeWindow]::GetDlgItem($hwnd, 305) -eq [IntPtr]::Zero) { throw 'Dedicated numpad editor missing' }
         if ([ThemeWindow]::GetDlgItem($hwnd, 111) -ne [IntPtr]::Zero) { throw 'Windows-key setting still lives in a profile control' }
         if ([ThemeWindow]::SendMessage([ThemeWindow]::GetDlgItem($hwnd,106),0x1004,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -ne 2) { throw 'Dedicated keypad mappings leaked into general list' }
+        $list = [ThemeWindow]::GetDlgItem($hwnd,106)
+        if ([ThemeWindow]::SendMessage($list,0x104E,[IntPtr]::Zero,[IntPtr]::Zero) -ne [IntPtr]::Zero) { throw 'Native mapping tooltip was not disabled' }
+        if ([ThemeWindow]::GetDlgItem($hwnd,410) -eq [IntPtr]::Zero) { throw 'Combination section missing' }
         $toggle = [ThemeWindow]::GetDlgItem($hwnd, 112)
         $activeLabel = New-Object Text.StringBuilder 256
         $null = [ThemeWindow]::GetWindowText($toggle, $activeLabel, 256)
@@ -152,7 +155,7 @@ try {
         if (([ThemeWindow]::GetMenuState($languages, [uint32](2000 + $language), 0) -band 8) -eq 0) { throw 'Language menu selection did not persist' }
         # Exercise hover/leave repainting of a keycap, action button, checkbox
         # and combo before every palette/language screenshot.
-        foreach ($control in 107,109,114,101,300) {
+        foreach ($control in 107,109,121,101,300,411,414) {
             $item = [ThemeWindow]::GetDlgItem($hwnd,$control)
             $null = [ThemeWindow]::SendMessage($item,0x200,[IntPtr]::Zero,[IntPtr]0x00100010)
             $null = [ThemeWindow]::UpdateWindow($item)
@@ -207,7 +210,7 @@ try {
         $null = [ThemeWindow]::SendMessage($hwnd, 0x8001, [IntPtr]::Zero, [IntPtr]::Zero) # Pause first.
         $null = [ThemeWindow]::SendMessage($hwnd, 0x8005, [IntPtr]$index, [IntPtr]::Zero)
         $contents = [IO.File]::ReadAllText($profile)
-        if (!$contents.StartsWith("MYWARKEY 3 $index 11 0 1")) { throw "Profile slot $index did not persist" }
+        if (!$contents.StartsWith("MYWARKEY 4 $index 11 0 1")) { throw "Profile slot $index did not persist" }
         $label = New-Object Text.StringBuilder 256
         $null = [ThemeWindow]::GetWindowText([ThemeWindow]::GetDlgItem($hwnd, 112), $label, 256)
         if ($label.ToString() -cne 'Pause remapping') { throw 'Profile shortcut did not enable remapping' }
@@ -239,7 +242,7 @@ try {
     # Windows-key blocking is global across profile changes.
     $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]111,[IntPtr]::Zero)
     $null = [ThemeWindow]::SendMessage($hwnd,0x8005,[IntPtr]::Zero,[IntPtr]::Zero)
-    if (![IO.File]::ReadAllText($profile).StartsWith("MYWARKEY 3 0 11 0 1 1")) { throw 'Global Windows-key setting lost on profile switch' }
+    if (![IO.File]::ReadAllText($profile).StartsWith("MYWARKEY 4 0 11 0 1 1")) { throw 'Global Windows-key setting lost on profile switch' }
     # Route a captured replacement into the dedicated numpad mapping and
     # verify it stays out of the general table. Generation is intentionally
     # opaque; stale capture messages must be ignored until the current token.
@@ -253,6 +256,19 @@ try {
     }
     if ($caption.ToString() -cne 'T' -or ![IO.File]::ReadAllText($profile).Contains('103 84')) { throw 'Numpad destination capture did not save' }
     if ([ThemeWindow]::SendMessage([ThemeWindow]::GetDlgItem($hwnd,106),0x1004,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -ne 0) { throw 'Captured numpad mapping appeared in general table' }
+    # Create A+B -> D, then add the third key through capture and update it.
+    $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]415,[IntPtr]::Zero)
+    if ([ThemeWindow]::SendMessage([ThemeWindow]::GetDlgItem($hwnd,410),0x18B,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -ne 1) { throw 'Two-key combination did not save' }
+    $null = [ThemeWindow]::SetForegroundWindow($hwnd)
+    $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]413,[IntPtr]::Zero)
+    foreach ($generation in 0..100) {
+        $null = [ThemeWindow]::SendMessage($hwnd,0x8003,[IntPtr]$generation,[IntPtr](67 -bor (2 -shl 16)))
+        $null = [ThemeWindow]::GetWindowText([ThemeWindow]::GetDlgItem($hwnd,413),$caption.Clear(),256)
+        if ($caption.ToString() -ceq 'C') { break }
+    }
+    if ($caption.ToString() -cne 'C') { throw 'Third combination key capture failed' }
+    $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]415,[IntPtr]::Zero)
+    if (![IO.File]::ReadAllText($profile).Contains('3 65 66 67 68')) { throw 'Three-key combination did not update' }
     # Save two independent Quick Chat slots and reopen to check persistence.
     $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]121,[IntPtr]::Zero)
     $chat = [ThemeWindow]::FindWindow('MagicKey.QuickChat','Quick Chat')
@@ -260,6 +276,9 @@ try {
     $slots = [ThemeWindow]::GetDlgItem($chat,401)
     $edit = [ThemeWindow]::GetDlgItem($chat,402)
     if (![ThemeWindow]::SetControlText($edit,'你好 诸葛亮')) { throw 'Quick Chat message edit could not be set' }
+    $null = [ThemeWindow]::SendMessage($hwnd,0x8005,[IntPtr]1,[IntPtr]::Zero)
+    $null = [ThemeWindow]::GetControlText($edit,$caption.Clear(),256)
+    if ($caption.ToString() -cne '你好 诸葛亮') { throw 'Profile switching changed the Quick Chat draft' }
     $rect = New-Object ThemeWindow+Rect
     $null = [ThemeWindow]::GetWindowRect($chat,[ref]$rect)
     $preview = New-Object Drawing.Bitmap ($rect.Right-$rect.Left),($rect.Bottom-$rect.Top)
@@ -269,12 +288,14 @@ try {
     finally { $graphics.ReleaseHdc($dc); $graphics.Dispose() }
     try { $preview.Save((Join-Path $output 'quick-chat.png'),[Drawing.Imaging.ImageFormat]::Png) }
     finally { $preview.Dispose() }
-    $null = [ThemeWindow]::SendMessage($chat,0x111,[IntPtr]403,[IntPtr]::Zero)
+    $null = [ThemeWindow]::SendMessage([ThemeWindow]::GetDlgItem($chat,403),0xF5,[IntPtr]::Zero,[IntPtr]::Zero)
+    $null = [ThemeWindow]::GetWindowText([ThemeWindow]::GetDlgItem($chat,405),$caption.Clear(),256)
+    if ($caption.ToString() -cne 'Saved') { throw 'Quick Chat did not acknowledge saving' }
     if (![IO.File]::ReadAllText($profile).Contains('你好 诸葛亮')) { throw ('Quick Chat save failed: ' + [IO.File]::ReadAllText($profile)) }
     $null = [ThemeWindow]::SendMessage($slots,0x14E,[IntPtr]9,[IntPtr]::Zero)
     $null = [ThemeWindow]::SendMessage($chat,0x111,[IntPtr](401 -bor (1 -shl 16)),$slots)
     $null = [ThemeWindow]::SetControlText($edit,'Ready team')
-    $null = [ThemeWindow]::SendMessage($chat,0x111,[IntPtr]403,[IntPtr]::Zero)
+    $null = [ThemeWindow]::SendMessage([ThemeWindow]::GetDlgItem($chat,403),0xF5,[IntPtr]::Zero,[IntPtr]::Zero)
     $null = [ThemeWindow]::SendMessage($chat,0x10,[IntPtr]::Zero,[IntPtr]::Zero)
     Close-MagicKey $process
     $process = Start-MagicKey
@@ -282,6 +303,10 @@ try {
     $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]121,[IntPtr]::Zero)
     $chat = [ThemeWindow]::FindWindow('MagicKey.QuickChat','Quick Chat')
     $edit = [ThemeWindow]::GetDlgItem($chat,402)
+    $slots = [ThemeWindow]::GetDlgItem($chat,401)
+    if ([ThemeWindow]::SendMessage($slots,0x147,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -ne 9) { throw 'Quick Chat selected slot was not remembered' }
+    $null = [ThemeWindow]::SendMessage($slots,0x14E,[IntPtr]::Zero,[IntPtr]::Zero)
+    $null = [ThemeWindow]::SendMessage($chat,0x111,[IntPtr](401 -bor (1 -shl 16)),$slots)
     $null = [ThemeWindow]::GetControlText($edit,$caption.Clear(),256)
     if ($caption.ToString() -cne '你好 诸葛亮') { throw ('Quick Chat slot 1 failed round trip; actual=' + $caption.ToString() + '; window=' + $chat + '; edit=' + $edit + '; file=' + [IO.File]::ReadAllText($profile)) }
     $slots = [ThemeWindow]::GetDlgItem($chat,401)
@@ -289,7 +314,7 @@ try {
     $null = [ThemeWindow]::SendMessage($chat,0x111,[IntPtr](401 -bor (1 -shl 16)),$slots)
     $null = [ThemeWindow]::GetControlText($edit,$caption.Clear(),256)
     if ($caption.ToString() -cne 'Ready team') { throw 'Quick Chat slot 0 failed round trip' }
-    $null = [ThemeWindow]::SendMessage($chat,0x111,[IntPtr]404,[IntPtr]::Zero)
+    $null = [ThemeWindow]::SendMessage([ThemeWindow]::GetDlgItem($chat,404),0xF5,[IntPtr]::Zero,[IntPtr]::Zero)
     $null = [ThemeWindow]::GetControlText($edit,$caption.Clear(),256)
     if ($caption.Length -ne 0) { throw 'Quick Chat clear did not clear slot' }
     $null = [ThemeWindow]::SendMessage($chat,0x10,[IntPtr]::Zero,[IntPtr]::Zero)

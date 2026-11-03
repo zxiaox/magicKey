@@ -68,3 +68,13 @@ and press the replacement; right-click to disable or restore. General mappings
 have separate Add/Update actions and a New mapping button.
 Disable Windows keys is global under Settings. The selected legacy profile's
 preference migrates to the global setting. Saving upgrades profiles to version 3.
+
+VERSION 1.8
+Profiles span the top. Numeric keypad is on the left; Key Mapping and
+Multi-Key Combinations are stacked on the right. Status stays at the bottom.
+Combinations use two or three distinct keys pressed within 150 ms. Right-click
+the third input to clear it. Built-in shortcuts take priority; incomplete
+combinations keep their normal key behavior. Game-compatible input is in Settings.
+Quick Chat is global across profiles, autosaves, remembers the selected slot,
+and shows Saving/Saved/Not saved. Save writes immediately. Switching profiles
+preserves an open draft. Saving upgrades data to version 4 (reads versions 1-3).

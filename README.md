@@ -42,7 +42,7 @@ Download **MagicKey-windows-x64-portable.zip** from [GitHub Releases](https://gi
 
 A release must first be published by the workflow below before the download links or in-app checks can return an executable. This source tree alone is not a published GitHub release.
 
-The app displays **MagicKey v1.7.0** in its heading. Windows file properties also contain the product name and version, generated from the single version in `CMakeLists.txt`.
+The app displays **MagicKey v1.8.0** in its heading. Windows file properties also contain the product name and version, generated from the single version in `CMakeLists.txt`.
 
 ## Build and publish (maintainers)
 
@@ -55,8 +55,8 @@ To publish a stable release:
 
    ```sh
    git push origin main
-   git tag v1.7.0
-   git push origin v1.7.0
+   git tag v1.8.0
+   git push origin v1.8.0
    ```
 
 3. Open **Actions → Build and release MagicKey**. After compilation, tests, and packaging succeed, the tag run creates a draft release with all four download assets, then publishes it as the latest stable release. A tag that differs from the compiled version fails before publication. Branch and pull-request runs never publish releases.
@@ -108,9 +108,9 @@ Number labels distinguish **Top row 7** from **Numpad 7**, and likewise for ever
 3. Replace your previous `MagicKey.exe` with `build-windows\Release\MagicKey.exe`, leaving your profile file beside it. If you run the executable directly from the build folder, copy your profile file there too.
 4. Choose your language in **Settings → Language** and leave **Game-compatible input (scan codes)** checked when testing Warcraft III.
 
-The new version reads version-1 and version-2 profile files. An untouched legacy **Default** profile containing exactly A → Q and W → Numpad 7 (version 1), or top-row 7 → Q and 8 → W, is updated to **Numpad 7 → Q**, **Numpad 8 → W**, and **Numpad 5 → R**. Other profiles, including a customized Default profile, are preserved. Each profile created with **New** starts with **Q → Numpad 7**, **W → Numpad 8**, and **R → Numpad 5**. Existing empty profiles stay empty; the defaults are only applied on creation. Saving now writes the version-3 settings format described below.
+The new version reads version-1 and version-2 profile files. An untouched legacy **Default** profile containing exactly A → Q and W → Numpad 7 (version 1), or top-row 7 → Q and 8 → W, is updated to **Numpad 7 → Q**, **Numpad 8 → W**, and **Numpad 5 → R**. Other profiles, including a customized Default profile, are preserved. Each profile created with **New** starts with **Q → Numpad 7**, **W → Numpad 8**, and **R → Numpad 5**. Existing empty profiles stay empty; the defaults are only applied on creation. Saving now writes the version-4 settings format described below.
 
-The next settings change saves the version-3 format with global Windows-key blocking and Quick Chat entries; older executables cannot read that format. Keep your backup if you need to downgrade.
+The next settings change saves the version-4 format with global Windows-key blocking and Quick Chat entries; older executables cannot read that format. Keep your backup if you need to downgrade.
 
 ## Warcraft III: typing works but abilities do not
 
@@ -170,4 +170,12 @@ Selecting a general mapping fills the editor and sets **Update**. Changing its s
 
 Open **Quick Chat** from the sidebar or Settings. Select one of ten **Alt + 1–9, 0** slots, type a single-line message (up to 120 UTF-16 characters and 512 UTF-8 bytes), and click **Save**; **Clear** unassigns that slot. These entries are global, saved beside the profiles, and sent verbatim through the existing Warcraft chat transport only while Warcraft is foreground. They work even when key remapping is paused and do not change the active profile. Use with chat closed; game chat length and font limitations still apply. Profile switching now uses **Ctrl + Alt + 1–9, 0**, so the two functions do not compete. As before, only the first ten profiles have digit shortcuts.
 
-Settings are now written as `MYWARKEY 3`; keep a backup before downgrading to an older executable. Theme preferences remain in their separate file. Buttons use a consistent owner-drawn paint path, and dropdowns paint inside the Windows paint cycle rather than drawing again after native hover painting.
+Settings are now written as `MYWARKEY 4`; keep a backup before downgrading to an older executable. Theme preferences remain in their separate file. Buttons use a consistent owner-drawn paint path, and dropdowns paint inside the Windows paint cycle rather than drawing again after native hover painting.
+
+## Row layout, combinations and independent Quick Chat (v1.8)
+
+The top row contains Configuration Schemes. The middle row places Custom Numeric Keypad on the left, Key Mapping at upper right, and Multi-Key Combinations at lower right. The bottom status row is unchanged. Game-compatible scan-code input is available in Settings. Mapping column labels are plain static text; native header and list tooltips are disabled.
+
+A combination has two required source keys, an optional third key, and one output. Click the source/target buttons to capture keys, then Add or Update. Right-click the third button to return to two keys. New creates another rule; Remove deletes the selected rule. Keys are order-independent and must be distinct. Built-in shortcuts take priority. Press all keys within **150 ms**; only configured chord members can be delayed. Unmatched taps or held keys resume their normal individual mappings after release/timeout. With overlapping A+B and A+B+C rules, the larger complete rule wins; the shorter waits until the window expires or the chord ends. Output stays held until any combination member is released. Pause, profile changes, focus changes and exit release held outputs and cancel unfinished combinations.
+
+Quick Chat remains **global**, independent of every profile. It autosaves after a 350 ms typing pause and on slot change or closing; Save writes immediately. The editor displays Saving/Saved/Not saved, remembers the selected slot, and shows saved message previews in the shortcut list. Switching profiles does not reload or alter an open Quick Chat draft. If saving fails, the editor keeps the draft and does not silently close. Settings version 4 adds per-profile combinations and the global Quick Chat editor slot, while reading versions 1–3. Keep a backup when downgrading; older executables cannot read version 4.

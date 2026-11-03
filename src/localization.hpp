@@ -4,6 +4,18 @@
 namespace mywarkey {
 struct Translation { const wchar_t *en, *zh, *ja, *ko; };
 inline constexpr Translation translations[] = {
+    {L"Configuration Schemes", L"配置方案", L"設定プロファイル", L"설정 프로필"},
+    {L"Multi-Key Combinations", L"多键组合", L"複数キーの組み合わせ", L"다중 키 조합"},
+    {L"Click a key, then press its replacement.", L"点击按键后，按下替换键。", L"キーをクリックして置き換えるキーを押します。", L"키를 클릭한 다음 대체 키를 누르세요."},
+    {L"Press 2–3 keys within 150 ms. Right-click the third key to clear it.", L"在 150 毫秒内按下 2–3 个键。右键点击第三键可清除。", L"150 ms 以内に2～3キーを押します。3番目は右クリックで解除。", L"150ms 안에 2–3개 키를 누르세요. 세 번째 키는 우클릭으로 지웁니다."},
+    {L"Saved", L"已保存", L"保存済み", L"저장됨"},
+    {L"Saving...", L"正在保存…", L"保存中…", L"저장 중…"},
+    {L"Not saved", L"未保存", L"未保存", L"저장 안 됨"},
+    {L"Not assigned", L"未设置", L"未設定", L"미지정"},
+    {L"A combination needs two or three keys.", L"组合需要两个或三个按键。", L"組み合わせには2～3キーが必要です。", L"조합에는 2개 또는 3개의 키가 필요합니다."},
+    {L"Combination keys must be distinct valid keys.", L"组合按键不能重复。", L"異なる有効なキーを指定してください。", L"서로 다른 유효한 키를 지정하세요."},
+    {L"That combination already exists.", L"该组合已存在。", L"この組み合わせは既に存在します。", L"이미 존재하는 조합입니다."},
+    {L"Too many combinations.", L"组合数量已达上限。", L"組み合わせが多すぎます。", L"조합이 너무 많습니다."},
     {L"Custom Numeric Keypad", L"自定义数字键盘", L"テンキーのカスタマイズ", L"숫자 키패드 사용자 지정"},
     {L"Key Mapping", L"按键映射", L"キー割り当て", L"키 매핑"},
     {L"Add", L"添加", L"追加", L"추가"},

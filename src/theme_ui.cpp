@@ -102,6 +102,8 @@ void ThemeUI::apply(HWND root, HWND list, ThemeId theme) {
         ListView_SetBkColor(list, color(p.panel)); ListView_SetTextBkColor(list, color(p.panel));
         ListView_SetTextColor(list, color(p.text));
         SetWindowTheme(list, L"", L"");
+        HWND tips = ListView_SetToolTips(list,nullptr);
+        if (tips) DestroyWindow(tips);
         SetWindowSubclass(list, listSubclass, 1, reinterpret_cast<DWORD_PTR>(this));
     }
     if (root) {
@@ -139,7 +141,7 @@ void ThemeUI::paint(HDC dc, const RECT& bounds, bool enabled, int language) cons
         }
         line(dc, 24, 103, 876, 103, p.border);
     }
-    for (RECT card : {RECT{24,118,270,592}, RECT{288,118,876,270}, RECT{288,282,876,592}, RECT{24,610,876,662}}) {
+    for (RECT card : {RECT{24,118,876,198}, RECT{24,210,320,592}, RECT{338,210,876,404}, RECT{338,416,876,592}, RECT{24,610,876,662}}) {
         roundBox(dc, card, p.panel, p.border, selected == ThemeId::Warcraft ? 3 : 16);
         if (selected == ThemeId::Warcraft) {
             for (int x : {card.left + 6, card.right - 6}) for (int y : {card.top + 6, card.bottom - 6}) {
@@ -153,13 +155,14 @@ void ThemeUI::paint(HDC dc, const RECT& bounds, bool enabled, int language) cons
     text(dc, L"MagicKey", {92,23,360,61}, headingFont, selected == ThemeId::Warcraft ? p.accent : p.text);
     const auto subtitle = std::wstring(L"v") + MAGICKEY_VERSION_W + L"  /  " + tr(L"Portable keyboard control");
     text(dc, subtitle.c_str(), {94,64,550,86}, smallFont, p.muted);
-    line(dc, 44, 377, 250, 377, p.border);
-    text(dc, tr(L"Toggle remapping"), {44,495,250,515}, smallFont, p.muted);
-    roundBox(dc, {44,523,250,557}, p.control, p.border, 8);
-    text(dc, L"Ctrl + Alt + F12", {44,523,250,557}, strongFont, p.accent, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-    text(dc, tr(L"Profiles save automatically."), {44,565,250,583}, smallFont, p.muted);
+    text(dc, tr(L"Toggle remapping"), {44,516,300,536}, smallFont, p.muted);
+    roundBox(dc, {44,542,300,576}, p.control, p.border, 8);
+    text(dc, L"Ctrl + Alt + F12", {44,542,300,576}, strongFont, p.accent, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     roundBox(dc, {40,632,48,640}, enabled ? p.success : p.muted, enabled ? p.success : p.muted, 8);
-    text(dc, L"\x2192", {465,474,482,508}, strongFont, p.muted, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    text(dc, L"+", {442,514,462,544}, strongFont,p.muted,DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    text(dc, L"+", {544,514,564,544}, strongFont,p.muted,DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    text(dc, L"\x2192", {646,514,672,544}, strongFont,p.muted,DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    text(dc, L"\x2192", {492,352,506,382}, strongFont, p.muted, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 }
 LRESULT ThemeUI::button(NMCUSTOMDRAW* draw, ButtonRole role, bool listening, bool checked) const {
     if (draw->dwDrawStage != CDDS_PREPAINT) return CDRF_DODEFAULT;
