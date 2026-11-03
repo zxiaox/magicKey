@@ -252,7 +252,7 @@ try {
     if ([ThemeWindow]::SendMessage([ThemeWindow]::GetDlgItem($hwnd,106),0x1004,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -ne 0) { throw 'Captured numpad mapping appeared in general table' }
     # Save two independent Quick Chat slots and reopen to check persistence.
     $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]121,[IntPtr]::Zero)
-    $chat = [ThemeWindow]::FindWindow('MagicKey.QuickChat',$null)
+    $chat = [ThemeWindow]::FindWindow('MagicKey.QuickChat','Quick Chat')
     if ($chat -eq [IntPtr]::Zero) { throw 'Quick Chat editor missing' }
     $slots = [ThemeWindow]::GetDlgItem($chat,401)
     $edit = [ThemeWindow]::GetDlgItem($chat,402)
@@ -267,7 +267,7 @@ try {
     $process = Start-MagicKey
     $hwnd = $process.MainWindowHandle
     $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]121,[IntPtr]::Zero)
-    $chat = [ThemeWindow]::FindWindow('MagicKey.QuickChat',$null)
+    $chat = [ThemeWindow]::FindWindow('MagicKey.QuickChat','Quick Chat')
     $edit = [ThemeWindow]::GetDlgItem($chat,402)
     $null = [ThemeWindow]::GetWindowText($edit,$caption.Clear(),256)
     if ($caption.ToString() -cne '你好 诸葛亮') { throw 'Quick Chat slot 1 failed round trip' }
