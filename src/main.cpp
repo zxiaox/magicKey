@@ -16,16 +16,28 @@
 #include "app_identity.hpp"
 
 using namespace mywarkey;
-constexpr UINT ToggleMessage = WM_APP + 1, InputError = WM_APP + 2, CapturedKey = WM_APP + 3, UpdateFinished = WM_APP + 4, ProfileSwitch = WM_APP + 5;
+constexpr UINT ToggleMessage = WM_APP + 1, InputError = WM_APP + 2, CapturedKey = WM_APP + 3, UpdateFinished = WM_APP + 4, ProfileSwitch = WM_APP + 5, QuickChatSend = WM_APP + 6;
 enum ControlId { ProfileBox = 101, NewProfile, RenameProfile, DeleteProfile, ProfileName,
-    MappingList, SourceBox, TargetBox, AddMapping, RemoveMapping, BlockWindows, Toggle, LanguageBox, ScanCodes, DisableTarget, CheckUpdates, ThemeBox, SectionProfile, SectionMappings };
+    MappingList, SourceBox, TargetBox, AddMapping, RemoveMapping, BlockWindows, Toggle, LanguageBox, ScanCodes, DisableTarget, CheckUpdates, ThemeBox, SectionProfile, SectionMappings, NewMapping, QuickChatOpen };
+constexpr int NumpadBase = 300;
 constexpr wchar_t ClassName[] = L"mywarkey.Portable.Window";
-HWND window, profileBox, nameEdit, mappingList, sourceBox, targetBox, blockBox, toggleButton, statusLabel, scanBox;
+HWND window, profileBox, nameEdit, mappingList, sourceBox, targetBox, toggleButton, statusLabel, scanBox;
 std::vector<std::pair<HWND, std::wstring>> localizedControls;
 HFONT font;
 magickey::ThemeUI themeUI;
 constexpr int LanguageMenu = 2000, ThemeMenu = 2010, NotificationDiagnostics = 2020;
 HIMAGELIST rowImages;
+std::array<HWND, 6> numpadButtons{};
+int numpadEditing = -1, editingSource = -1;
+bool refreshingMappings = false;
+std::string editorProfile;
+std::array<bool, 10> liveQuickAssigned{};
+HWND quickChatWindow = nullptr, quickSlotBox = nullptr, quickTextEdit = nullptr;
+void openQuickChat();
+bool editorActive() {
+    HWND foreground = GetForegroundWindow();
+    return foreground == window || (foreground && GetAncestor(foreground, GA_ROOTOWNER) == window);
+}
 HANDLE hookThread, hookReady;
 DWORD hookThreadId;
 bool hookInstalled = false;
@@ -140,6 +152,8 @@ void syncEngine() {
     std::lock_guard<std::mutex> lock(engineMutex);
     engine.release(sendKey);
     liveProfile = settings.profiles[settings.selected];
+    liveProfile.blockWindows = settings.blockWindows;
+    for (int i = 0; i < 10; ++i) liveQuickAssigned[i] = !settings.quickChat[i].empty();
     liveEnabled = enabled;
     liveScanCodes = settings.scanCodes;
     liveProfileCount = settings.profiles.size();
@@ -156,6 +170,7 @@ LRESULT CALLBACK keyboardProc(int code, WPARAM message, LPARAM value) {
     static std::array<bool, 256> physical{};
     static ToggleHotkey toggleHotkey;
     static ProfileHotkeys profileHotkeys;
+    static ProfileHotkeys quickChatHotkeys(false);
     bool down = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;
     int source = sourceKey(key);
     if (source < 1 || source > 254) return CallNextHookEx(nullptr, code, message, value);
@@ -181,7 +196,7 @@ LRESULT CALLBACK keyboardProc(int code, WPARAM message, LPARAM value) {
     std::size_t profileCount;
     { std::lock_guard<std::mutex> lock(engineMutex); profileCount = liveProfileCount; }
     auto profileKey = profileHotkeys.event(source, down, wasDown,
-        physical[VK_LMENU] || physical[VK_RMENU], physical[VK_LCONTROL] || physical[VK_RCONTROL],
+        physical[VK_LMENU], physical[VK_LCONTROL] || physical[VK_RCONTROL],
         physical[VK_LSHIFT] || physical[VK_RSHIFT], profileCount);
     if (profileKey.swallow) {
         {
@@ -190,6 +205,19 @@ LRESULT CALLBACK keyboardProc(int code, WPARAM message, LPARAM value) {
             if (!down) capture.event(source, false, wasDown);
         }
         if (profileKey.index >= 0) PostMessageW(window, ProfileSwitch, profileKey.index, LPARAM(GetForegroundWindow()));
+        return 1;
+    }
+    int digit = profileDigit(source);
+    bool assigned = false;
+    if (digit >= 0) { std::lock_guard<std::mutex> lock(engineMutex); assigned = liveQuickAssigned[digit]; }
+    bool eligible = assigned && physical[VK_LMENU] && !physical[VK_LCONTROL] && !physical[VK_RCONTROL] &&
+        !physical[VK_LSHIFT] && !physical[VK_RSHIFT];
+    if (eligible && down && !wasDown) eligible = isWarcraftForeground(GetForegroundWindow());
+    auto chatKey = quickChatHotkeys.event(source, down, wasDown, physical[VK_LMENU] || physical[VK_RMENU],
+        physical[VK_LCONTROL] || physical[VK_RCONTROL], physical[VK_LSHIFT] || physical[VK_RSHIFT], eligible ? 10 : 0);
+    if (chatKey.swallow) {
+        { std::lock_guard<std::mutex> lock(engineMutex); engine.release(sendKey); capture.cancel(); ++captureGeneration; }
+        if (chatKey.index >= 0) PostMessageW(window, QuickChatSend, chatKey.index, LPARAM(GetForegroundWindow()));
         return 1;
     }
     bool swallowed;
@@ -203,7 +231,7 @@ LRESULT CALLBACK keyboardProc(int code, WPARAM message, LPARAM value) {
         if (result.swallow) return 1;
         // Keep the profile editor usable even when a profile remaps typing keys.
         swallowed = engine.event(source, down, liveProfile,
-            liveEnabled && !notificationTyping.load() && GetForegroundWindow() != window, sendKey);
+            liveEnabled && !notificationTyping.load() && !editorActive(), sendKey);
     }
     return swallowed ? 1 : CallNextHookEx(nullptr, code, message, value);
 }
@@ -235,11 +263,13 @@ bool commit(Settings candidate) {
     } catch (const std::exception& e) { error(wide(e.what())); return false; }
 }
 HWND control(const wchar_t* type, const wchar_t* label, DWORD style, int id, int x, int y, int w, int h) {
+    if (std::wstring_view(type) == L"BUTTON" && (style & BS_TYPEMASK) != BS_AUTOCHECKBOX) style = (style & ~BS_TYPEMASK) | BS_OWNERDRAW;
     if (std::wstring_view(type) == WC_COMBOBOXW) style |= CBS_OWNERDRAWFIXED | CBS_HASSTRINGS;
     HWND child = CreateWindowExW(0, type, tr(label), WS_CHILD | WS_VISIBLE | style,
         x, y, w, h, window, reinterpret_cast<HMENU>(INT_PTR(id)), GetModuleHandleW(nullptr), nullptr);
     SendMessageW(child, WM_SETFONT, WPARAM(std::wstring_view(type) == L"STATIC" ? themeUI.smallTextFont() : font), TRUE);
     if (std::wstring_view(type) == WC_COMBOBOXW) themeUI.prepareCombo(child);
+    if (std::wstring_view(type) == L"BUTTON") themeUI.prepareButton(child);
     if (*label && (std::wstring_view(type) == L"STATIC" || std::wstring_view(type) == L"BUTTON"))
         localizedControls.emplace_back(child, label);
     return child;
@@ -255,6 +285,8 @@ void refreshMenus() {
         AppendMenuW(themes, MF_STRING | (i == int(themeUI.theme()) ? MF_CHECKED : 0), ThemeMenu + i, tr(magickey::Themes[i].name));
     AppendMenuW(options, MF_POPUP, UINT_PTR(languages), tr(L"Language"));
     AppendMenuW(options, MF_POPUP, UINT_PTR(themes), tr(L"Theme"));
+    AppendMenuW(options, MF_STRING | (settings.blockWindows ? MF_CHECKED : 0), BlockWindows, tr(L"Disable Windows keys"));
+    AppendMenuW(options, MF_STRING, QuickChatOpen, tr(L"Quick Chat"));
     AppendMenuW(options, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(options, MF_STRING, CheckUpdates, tr(L"Check for updates"));
     AppendMenuW(options, MF_STRING, NotificationDiagnostics, tr(L"Notification diagnostics"));
@@ -283,8 +315,17 @@ void updateCaptureButtons() {
     auto target = slot == CaptureSlot::Target ? std::wstring(tr(L"Press a key...")) : keyName(targetChoice);
     SetWindowTextW(sourceBox, source.c_str());
     SetWindowTextW(targetBox, target.c_str());
+    const auto& mappings = settings.profiles[settings.selected].mappings;
+    SetWindowTextW(GetDlgItem(window, AddMapping), tr(editingSource >= 0 || mappings.count(sourceChoice) ? L"Update" : L"Add"));
+    for (int i = 0; i < 6; ++i) {
+        auto found = mappings.find(CustomNumpadKeys[i]);
+        auto text = numpadEditing == i && slot == CaptureSlot::Target ? std::wstring(tr(L"Press a key...")) :
+            found == mappings.end() ? std::wstring(L"?") : keyName(found->second);
+        SetWindowTextW(numpadButtons[i], text.c_str());
+    }
 }
 void cancelCapture() {
+    numpadEditing = -1;
     { std::lock_guard<std::mutex> lock(engineMutex); capture.cancel(); ++captureGeneration; }
     updateCaptureButtons();
 }
@@ -354,9 +395,15 @@ void refresh() {
     SendMessageW(profileBox, CB_SETCURSEL, settings.selected, 0);
     const auto& p = settings.profiles[settings.selected];
     SetWindowTextW(nameEdit, wide(p.name).c_str());
-    SendMessageW(blockBox, BM_SETCHECK, p.blockWindows ? BST_CHECKED : BST_UNCHECKED, 0);
+    if (editorProfile != p.name) {
+        editorProfile = p.name; editingSource = -1; sourceChoice = 'A'; targetChoice = 'Q';
+        for (auto [from, to] : p.mappings) if (!customNumpadKey(from)) { editingSource = sourceChoice = from; targetChoice = to; break; }
+    }
+    if (editingSource >= 0 && !p.mappings.count(editingSource)) editingSource = -1;
+    refreshingMappings = true;
     ListView_DeleteAllItems(mappingList);
     for (auto [from, to] : p.mappings) {
+        if (customNumpadKey(from)) continue;
         auto source = keyName(from), target = keyName(to);
         LVITEMW item{};
         item.mask = LVIF_TEXT | LVIF_PARAM;
@@ -364,7 +411,9 @@ void refresh() {
         item.pszText = source.data(); item.lParam = from;
         int row = ListView_InsertItem(mappingList, &item);
         ListView_SetItemText(mappingList, row, 1, target.data());
+        if (from == editingSource) ListView_SetItemState(mappingList, row, LVIS_SELECTED, LVIS_SELECTED);
     }
+    refreshingMappings = false; updateCaptureButtons();
     RECT listBounds; GetClientRect(mappingList, &listBounds);
     ListView_SetColumnWidth(mappingList, 1, listBounds.right - ListView_GetColumnWidth(mappingList, 0));
     SetWindowTextW(toggleButton, tr(enabled ? L"Pause remapping" : L"Enable remapping"));
@@ -392,30 +441,39 @@ void makeInterface() {
     control(L"BUTTON", L"New", WS_TABSTOP, NewProfile, 44, 280, 98, 32);
     control(L"BUTTON", L"Rename", WS_TABSTOP, RenameProfile, 152, 280, 98, 32);
     control(L"BUTTON", L"Delete", WS_TABSTOP, DeleteProfile, 44, 322, 206, 32);
-    control(L"STATIC", L"New profiles include:\nQ  \x2192  Numpad 7\nW  \x2192  Numpad 8\nR  \x2192  Numpad 5", 0, 0, 44, 393, 206, 86);
-    control(L"STATIC", L"KEY MAPPINGS", 0, SectionMappings, 310, 138, 300, 20);
-    control(L"BUTTON", L"Remove", WS_TABSTOP, RemoveMapping, 766, 133, 88, 30);
+    control(L"STATIC", L"Custom Numeric Keypad", 0, 0, 310, 130, 420, 20);
+    for (int i = 0; i < 6; ++i) {
+        int x = 310 + (i % 2) * 278, y = 160 + (i / 2) * 36;
+        std::wstring digit = std::to_wstring(CustomNumpadKeys[i] - VK_NUMPAD0) + L"  \x2192";
+        control(L"STATIC", digit.c_str(), 0, 0, x, y + 5, 45, 24);
+        // These numeric labels are fixed, so do not retain a temporary string.
+        localizedControls.pop_back();
+        numpadButtons[i] = control(L"BUTTON", L"", WS_TABSTOP, NumpadBase+i, x+50,y,208,30);
+    }
+    control(L"STATIC", L"Key Mapping", 0, SectionMappings, 310, 294, 300, 20);
+    control(L"BUTTON", L"New mapping", WS_TABSTOP, NewMapping, 634, 288, 126, 30);
+    control(L"BUTTON", L"Remove", WS_TABSTOP, RemoveMapping, 766, 288, 88, 30);
     mappingList = control(WC_LISTVIEWW, L"", LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_SHAREIMAGELISTS | WS_TABSTOP,
-        MappingList, 310, 176, 544, 176);
+        MappingList, 310, 326, 544, 116);
     ListView_SetExtendedListViewStyle(mappingList, LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER);
-    rowImages = ImageList_Create(1, 36, ILC_COLOR32, 1, 0);
+    rowImages = ImageList_Create(1, 32, ILC_COLOR32, 1, 0);
     ListView_SetImageList(mappingList, rowImages, LVSIL_SMALL);
     LVCOLUMNW column{}; column.mask = LVCF_TEXT | LVCF_WIDTH;
     column.pszText = const_cast<wchar_t*>(L"When you press"); column.cx = 212;
     ListView_InsertColumn(mappingList, 0, &column);
     column.pszText = const_cast<wchar_t*>(L"Send instead"); column.cx = 312;
     ListView_InsertColumn(mappingList, 1, &column);
-    control(L"STATIC", L"From key", 0, 0, 310, 365, 190, 20);
-    control(L"STATIC", L"To key", 0, 0, 522, 365, 190, 20);
-    sourceBox = control(L"BUTTON", L"", WS_TABSTOP, SourceBox, 310, 390, 190, 40);
-    targetBox = control(L"BUTTON", L"", WS_TABSTOP, TargetBox, 522, 390, 190, 40);
-    control(L"BUTTON", L"Disabled", WS_TABSTOP, DisableTarget, 730, 390, 124, 40);
-    control(L"BUTTON", L"Add / update", WS_TABSTOP, AddMapping, 730, 441, 124, 30);
-    control(L"STATIC", L"Click a key button, then press and release a key. Click again to cancel.", 0, 0, 310, 441, 398, 34);
-    blockBox = control(L"BUTTON", L"Disable both Windows keys in this profile", BS_AUTOCHECKBOX | WS_TABSTOP,
-        BlockWindows, 310, 508, 544, 30);
+    control(L"STATIC", L"From key", 0, 0, 310, 449, 155, 20);
+    control(L"STATIC", L"To key", 0, 0, 482, 449, 155, 20);
+    sourceBox = control(L"BUTTON", L"", WS_TABSTOP, SourceBox, 310, 474, 155, 34);
+    targetBox = control(L"BUTTON", L"", WS_TABSTOP, TargetBox, 482, 474, 155, 34);
+    control(L"BUTTON", L"Disabled", WS_TABSTOP, DisableTarget, 646, 474, 94, 34);
+    control(L"BUTTON", L"Add", WS_TABSTOP, AddMapping, 750, 474, 104, 34);
+    control(L"STATIC", L"Click a key button, then press and release a key. Click again to cancel.", 0, 0, 310, 516, 544, 32);
     scanBox = control(L"BUTTON", L"Game-compatible input (scan codes)", BS_AUTOCHECKBOX | WS_TABSTOP,
-        ScanCodes, 310, 546, 544, 30);
+        ScanCodes, 310, 552, 544, 30);
+    control(L"BUTTON", L"Quick Chat", WS_TABSTOP, QuickChatOpen, 44, 403, 206, 34);
+    control(L"STATIC", L"Alt + 1–0: Quick Chat", 0, 0, 44, 447, 206, 30);
     statusLabel = control(L"STATIC", L"", 0, 0, 58, 626, 590, 22);
     SendMessageW(statusLabel, WM_SETFONT, WPARAM(font), TRUE);
     toggleButton = control(L"BUTTON", L"", BS_DEFPUSHBUTTON | WS_TABSTOP, Toggle, 676, 620, 178, 32);
@@ -423,8 +481,88 @@ void makeInterface() {
     themeUI.apply(window, mappingList, themeUI.theme());
     refresh();
 }
+void loadQuickChatSlot() {
+    int slot = int(SendMessageW(quickSlotBox, CB_GETCURSEL, 0, 0));
+    if (slot >= 0 && slot < 10) SetWindowTextW(quickTextEdit, wide(settings.quickChat[slot]).c_str());
+}
+LRESULT CALLBACK quickChatProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
+    switch (message) {
+        case WM_CREATE: {
+            auto child = [hwnd](const wchar_t* type, const wchar_t* label, DWORD style, int id, int x, int y, int width, int height) {
+                if (std::wstring_view(type) == L"BUTTON") style = (style & ~BS_TYPEMASK) | BS_OWNERDRAW;
+                HWND item = CreateWindowExW(0, type, tr(label), WS_CHILD | WS_VISIBLE | style, x,y,width,height,hwnd,HMENU(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);
+                SendMessageW(item, WM_SETFONT, WPARAM(font), TRUE);
+                if (std::wstring_view(type) == L"BUTTON") themeUI.prepareButton(item);
+                return item;
+            };
+            child(L"STATIC", L"Quick Chat shortcut", 0, 0, 20,18,560,24);
+            quickSlotBox = child(WC_COMBOBOXW,L"",CBS_DROPDOWNLIST | WS_TABSTOP,401,20,48,560,300);
+            for (int i = 0; i < 10; ++i) {
+                auto label = std::wstring(L"Alt + ") + (i == 9 ? L'0' : wchar_t(L'1' + i));
+                SendMessageW(quickSlotBox,CB_ADDSTRING,0,LPARAM(label.c_str()));
+            }
+            SendMessageW(quickSlotBox, CB_SETCURSEL, 0, 0);
+            child(L"STATIC", L"Message", 0, 0, 20,96,560,24);
+            quickTextEdit = child(L"EDIT",L"",WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP,402,20,126,560,34);
+            SendMessageW(quickTextEdit, EM_SETLIMITTEXT, 120, 0);
+            child(L"STATIC", L"Saved messages send only while Warcraft is foreground. Use with chat closed.",0,0,20,177,560,48);
+            child(L"BUTTON", L"Save", WS_TABSTOP,403,320,240,120,34);
+            child(L"BUTTON", L"Clear", WS_TABSTOP,404,460,240,120,34);
+            loadQuickChatSlot(); magickey::setWindowIdentity(hwnd); return 0;
+        }
+        case WM_COMMAND: {
+            int id = LOWORD(w);
+            if (id == 401 && HIWORD(w) == CBN_SELCHANGE) { loadQuickChatSlot(); return 0; }
+            if (id == 403 || id == 404) {
+                int slot = int(SendMessageW(quickSlotBox, CB_GETCURSEL, 0, 0));
+                if (slot < 0 || slot >= 10) return 0;
+                wchar_t value[121]{}; GetWindowTextW(quickTextEdit, value, 121);
+                auto candidate = settings;
+                auto text = id == 404 ? std::string{} : utf8(value);
+                if (text.size() > 512) { MessageBoxW(hwnd,tr(L"Quick Chat message is too long."),L"MagicKey",MB_OK | MB_ICONWARNING); return 0; }
+                candidate.quickChat[slot] = text;
+                if (commit(std::move(candidate))) { loadQuickChatSlot(); refresh(); }
+                return 0;
+            }
+            break;
+        }
+        case WM_DRAWITEM: {
+            auto item = reinterpret_cast<DRAWITEMSTRUCT*>(l);
+            if (item->CtlType == ODT_BUTTON) { themeUI.ownerButton(item, item->CtlID == 403 ? magickey::ButtonRole::Primary : magickey::ButtonRole::Secondary, false); return TRUE; }
+            break;
+        }
+        case WM_ERASEBKGND: { RECT bounds; GetClientRect(hwnd,&bounds); FillRect(reinterpret_cast<HDC>(w),&bounds,themeUI.panel()); return 1; }
+        case WM_CTLCOLORSTATIC: SetTextColor(reinterpret_cast<HDC>(w),magickey::color(themeUI.colors().text)); SetBkMode(reinterpret_cast<HDC>(w),TRANSPARENT); return LRESULT(themeUI.panel());
+        case WM_CTLCOLOREDIT: case WM_CTLCOLORLISTBOX: SetTextColor(reinterpret_cast<HDC>(w),magickey::color(themeUI.colors().text)); SetBkColor(reinterpret_cast<HDC>(w),magickey::color(themeUI.colors().control)); return LRESULT(themeUI.input());
+        case WM_CLOSE: DestroyWindow(hwnd); return 0;
+        case WM_DESTROY: magickey::clearWindowIdentity(hwnd); quickChatWindow = nullptr; quickSlotBox = quickTextEdit = nullptr; return 0;
+    }
+    return DefWindowProcW(hwnd,message,w,l);
+}
+void openQuickChat() {
+    if (quickChatWindow) { ShowWindow(quickChatWindow,SW_RESTORE); SetForegroundWindow(quickChatWindow); return; }
+    WNDCLASSEXW wc{}; wc.cbSize = sizeof(wc); wc.lpfnWndProc = quickChatProc; wc.hInstance = GetModuleHandleW(nullptr);
+    wc.lpszClassName = L"MagicKey.QuickChat"; wc.hCursor = LoadCursorW(nullptr,IDC_ARROW);
+    wc.hIcon = magickey::appIcon(false); wc.hIconSm = magickey::appIcon(true); RegisterClassExW(&wc);
+    RECT bounds{0,0,600,294}; DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_CLIPCHILDREN;
+    AdjustWindowRect(&bounds,style,FALSE);
+    quickChatWindow = CreateWindowExW(WS_EX_CONTROLPARENT,wc.lpszClassName,tr(L"Quick Chat"),style,CW_USEDEFAULT,CW_USEDEFAULT,bounds.right-bounds.left,bounds.bottom-bounds.top,window,nullptr,wc.hInstance,nullptr);
+    ShowWindow(quickChatWindow,SW_SHOW); SetForegroundWindow(quickChatWindow);
+}
 void command(int id, int notification) {
+    if (id >= NumpadBase && id < NumpadBase + 6 && notification == BN_CLICKED) {
+        int index = id - NumpadBase;
+        bool again = numpadEditing == index;
+        cancelCapture();
+        if (!again) {
+            numpadEditing = index;
+            std::lock_guard<std::mutex> lock(engineMutex);
+            engine.release(sendKey); capture.arm(CaptureSlot::Target); ++captureGeneration;
+        }
+        updateCaptureButtons(); return;
+    }
     if (id == SourceBox || id == TargetBox) {
+        numpadEditing = -1;
         if (notification != BN_CLICKED) return;
         auto slot = id == SourceBox ? CaptureSlot::Source : CaptureSlot::Target;
         {
@@ -439,6 +577,10 @@ void command(int id, int notification) {
     if (id == ProfileName || (notification != BN_CLICKED && notification != CBN_SELCHANGE)) return;
     cancelCapture();
     if (id >= ThemeMenu && id < ThemeMenu + 4) { changeTheme(id - ThemeMenu); return; }
+    if (id == QuickChatOpen) { openQuickChat(); return; }
+    if (id == NewMapping) { editingSource = -1; sourceChoice = 'A'; targetChoice = 'Q';
+        while (sourceChoice < 'Z' && settings.profiles[settings.selected].mappings.count(sourceChoice)) ++sourceChoice;
+        refreshingMappings = true; ListView_SetItemState(mappingList, -1, 0, LVIS_SELECTED); refreshingMappings = false; updateCaptureButtons(); return; }
     if (id == NotificationDiagnostics) { MessageBoxW(window, gameNotifications.diagnostics().c_str(), tr(L"Notification diagnostics"), MB_OK | MB_ICONINFORMATION); return; }
     if (id == CheckUpdates) { beginUpdateCheck(); return; }
     if (id == DisableTarget) { targetChoice = 0; updateCaptureButtons(); return; }
@@ -456,7 +598,7 @@ void command(int id, int notification) {
     } else if (id >= LanguageMenu && id < LanguageMenu + 4) {
         candidate.language = id - LanguageMenu;
     } else if (id == ScanCodes) {
-        candidate.scanCodes = SendMessageW(scanBox, BM_GETCHECK, 0, 0) == BST_CHECKED;
+        candidate.scanCodes = !settings.scanCodes;
     } else if (id == NewProfile || id == RenameProfile) {
         auto name = enteredName();
         if (name.empty()) { error(L"Enter a profile name (up to 80 characters)."); return; }
@@ -473,11 +615,12 @@ void command(int id, int notification) {
         candidate.profiles.erase(candidate.profiles.begin() + candidate.selected);
         candidate.selected = std::min(candidate.selected, candidate.profiles.size() - 1);
     } else if (id == BlockWindows) {
-        p.blockWindows = SendMessageW(blockBox, BM_GETCHECK, 0, 0) == BST_CHECKED;
+        candidate.blockWindows = !settings.blockWindows;
     } else if (id == AddMapping) {
         int source = sourceChoice, target = targetChoice;
         if (source < 0 || target < 0) { error(L"Select a source key and a destination."); return; }
         if (source == target) { error(L"Choose a different destination, or remove the mapping to restore the key."); return; }
+        if (editingSource >= 0 && editingSource != source) p.mappings.erase(editingSource);
         p.mappings[source] = target;
     } else if (id == RemoveMapping) {
         int row = ListView_GetNextItem(mappingList, -1, LVNI_SELECTED);
@@ -486,7 +629,7 @@ void command(int id, int notification) {
         ListView_GetItem(mappingList, &item);
         p.mappings.erase(int(item.lParam));
     } else return;
-    commit(std::move(candidate));
+    if (commit(std::move(candidate)) && id == AddMapping) editingSource = sourceChoice;
     refresh();
 }
 LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
@@ -520,6 +663,37 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
         case WM_DRAWITEM: {
             auto item = reinterpret_cast<DRAWITEMSTRUCT*>(l);
             if (item->CtlType == ODT_COMBOBOX) { themeUI.combo(item); return TRUE; }
+            if (item->CtlType == ODT_BUTTON) {
+                auto role = magickey::ButtonRole::Secondary;
+                if (item->CtlID == Toggle || item->CtlID == AddMapping) role = magickey::ButtonRole::Primary;
+                if (item->CtlID == ScanCodes) role = magickey::ButtonRole::Checkbox;
+                if (item->CtlID == SourceBox || item->CtlID == TargetBox || (item->CtlID >= NumpadBase && item->CtlID < NumpadBase + 6)) role = magickey::ButtonRole::Key;
+                CaptureSlot slot;
+                { std::lock_guard<std::mutex> lock(engineMutex); slot = capture.activeSlot(); }
+                bool listening = (slot == CaptureSlot::Source && item->CtlID == SourceBox) ||
+                    (slot == CaptureSlot::Target && ((numpadEditing < 0 && item->CtlID == TargetBox) || item->CtlID == NumpadBase + numpadEditing));
+                themeUI.ownerButton(item, role, listening, settings.scanCodes); return TRUE;
+            }
+            break;
+        }
+        case WM_CONTEXTMENU: {
+            int id = GetDlgCtrlID(reinterpret_cast<HWND>(w));
+            if (id >= NumpadBase && id < NumpadBase + 6) {
+                cancelCapture();
+                HMENU menu = CreatePopupMenu();
+                AppendMenuW(menu, MF_STRING, 1, tr(L"Disabled"));
+                AppendMenuW(menu, MF_STRING, 2, tr(L"Restore original key"));
+                POINT at; GetCursorPos(&at);
+                int choice = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON, at.x, at.y, 0, hwnd, nullptr);
+                DestroyMenu(menu);
+                if (choice) {
+                    auto candidate = settings; int key = CustomNumpadKeys[id - NumpadBase];
+                    if (choice == 1) candidate.profiles[candidate.selected].mappings[key] = 0;
+                    else candidate.profiles[candidate.selected].mappings.erase(key);
+                    commit(std::move(candidate)); refresh();
+                }
+                return 0;
+            }
             break;
         }
         case WM_COMMAND: command(LOWORD(w), HIWORD(w)); return 0;
@@ -529,18 +703,8 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
             if (header->code == NM_CUSTOMDRAW) {
                 if (header->hwndFrom == mappingList) return themeUI.list(reinterpret_cast<NMLVCUSTOMDRAW*>(l));
                 if (header->hwndFrom == ListView_GetHeader(mappingList)) return themeUI.header(reinterpret_cast<NMCUSTOMDRAW*>(l));
-                auto role = magickey::ButtonRole::Secondary;
-                if (header->idFrom == Toggle || header->idFrom == AddMapping) role = magickey::ButtonRole::Primary;
-                if (header->idFrom == DeleteProfile) role = magickey::ButtonRole::Danger;
-                if (header->idFrom == SourceBox || header->idFrom == TargetBox) role = magickey::ButtonRole::Key;
-                if (header->idFrom == BlockWindows || header->idFrom == ScanCodes) role = magickey::ButtonRole::Checkbox;
-                wchar_t kind[32]{}; GetClassNameW(header->hwndFrom, kind, 32);
-                if (_wcsicmp(kind, L"Button") != 0) return CDRF_DODEFAULT;
-                CaptureSlot slot;
-                { std::lock_guard<std::mutex> lock(engineMutex); slot = capture.activeSlot(); }
-                const bool listening = (header->idFrom == SourceBox && slot == CaptureSlot::Source) ||
-                    (header->idFrom == TargetBox && slot == CaptureSlot::Target);
-                return themeUI.button(reinterpret_cast<NMCUSTOMDRAW*>(l), role, listening);
+                if (header->idFrom == ScanCodes) return themeUI.button(reinterpret_cast<NMCUSTOMDRAW*>(l), magickey::ButtonRole::Checkbox, false, settings.scanCodes);
+                return CDRF_DODEFAULT;
             }
             if (header->idFrom == MappingList && header->code == LVN_GETEMPTYMARKUP) {
                 auto empty = reinterpret_cast<NMLVEMPTYMARKUP*>(l);
@@ -550,10 +714,10 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
             }
             if (header->idFrom == MappingList && header->code == LVN_ITEMCHANGED) {
                 auto change = reinterpret_cast<NMLISTVIEW*>(l);
-                if (change->uNewState & LVIS_SELECTED) {
+                if (!refreshingMappings && (change->uNewState & LVIS_SELECTED)) {
                     cancelCapture();
                     int key = int(change->lParam);
-                    sourceChoice = key;
+                    editingSource = sourceChoice = key;
                     const auto& mappings = settings.profiles[settings.selected].mappings;
                     auto found = mappings.find(key);
                     if (found != mappings.end()) targetChoice = found->second;
@@ -566,6 +730,14 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
             bool current;
             { std::lock_guard<std::mutex> lock(engineMutex); current = unsigned(w) == captureGeneration; }
             if (current && GetForegroundWindow() == window) {
+                if (numpadEditing >= 0) {
+                    int from = CustomNumpadKeys[numpadEditing], to = LOWORD(l);
+                    numpadEditing = -1;
+                    auto candidate = settings;
+                    if (from == to) candidate.profiles[candidate.selected].mappings.erase(from);
+                    else candidate.profiles[candidate.selected].mappings[from] = to;
+                    commit(std::move(candidate)); refresh(); return 0;
+                }
                 if (CaptureSlot(HIWORD(l)) == CaptureSlot::Source) sourceChoice = LOWORD(l);
                 else targetChoice = LOWORD(l);
                 updateCaptureButtons();
@@ -585,6 +757,12 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
             gameNotifications.queue(reinterpret_cast<HWND>(l), toggleMessage(enabled, settings.language));
             cancelNotification = false; notificationTyping = gameNotifications.typing();
             refresh(); return 0;
+        case QuickChatSend:
+            if (w < 10 && !settings.quickChat[w].empty()) {
+                gameNotifications.queue(reinterpret_cast<HWND>(l), wide(settings.quickChat[w]));
+                cancelNotification = false; notificationTyping = gameNotifications.typing();
+            }
+            return 0;
         case ProfileSwitch: {
             if (w >= settings.profiles.size() || w >= 10) return 0;
             auto candidate = settings; candidate.selected = std::size_t(w);
@@ -621,6 +799,7 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
             SetBkMode(reinterpret_cast<HDC>(w), TRANSPARENT);
             return LRESULT(themeUI.staticBackground(child, hwnd));
         }
+        case WM_CTLCOLORBTN:
         case WM_CTLCOLOREDIT:
         case WM_CTLCOLORLISTBOX:
             SetTextColor(reinterpret_cast<HDC>(w), magickey::color(themeUI.colors().text));
@@ -665,6 +844,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
             std::ifstream in(settingsPath, std::ios::binary);
             auto loaded = readSettings(in);
             for (const auto& p : loaded.profiles) (void)wide(p.name);
+            for (const auto& text : loaded.quickChat) (void)wide(text);
             settings = std::move(loaded);
         } catch (const std::exception& e) {
             // Preserve the user's original; never silently overwrite damaged profiles.
@@ -675,6 +855,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
         }
     }
     liveProfile = settings.profiles[settings.selected];
+    liveProfile.blockWindows = settings.blockWindows;
+    for (int i = 0; i < 10; ++i) liveQuickAssigned[i] = !settings.quickChat[i].empty();
     liveScanCodes = settings.scanCodes;
     liveProfileCount = settings.profiles.size();
     bool invalidTheme = false;
@@ -710,7 +892,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     }
     MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
-        if (!IsDialogMessageW(window, &msg)) { TranslateMessage(&msg); DispatchMessageW(&msg); }
+        if (!(quickChatWindow && IsDialogMessageW(quickChatWindow, &msg)) && !IsDialogMessageW(window, &msg)) { TranslateMessage(&msg); DispatchMessageW(&msg); }
     }
     if (hookThread) { WaitForSingleObject(hookThread, 5000); CloseHandle(hookThread); }
     if (hookReady) CloseHandle(hookReady);

@@ -41,6 +41,14 @@ INPUT scanInput(WORD scan, bool down) {
     return i;
 }
 }
+bool isWarcraftForeground(HWND window) {
+    wchar_t name[256]{};
+    if (!window || GetForegroundWindow() != window) return false;
+    GetClassNameW(window, name, int(std::size(name)));
+    if (warcraftWindowClass(name)) return true;
+    std::wstring description; bool classic = false;
+    return warcraftProcess(window, description, classic) != 0;
+}
 bool GameNotifications::sameTarget() const {
     DWORD pid = 0;
     if (!target || GetForegroundWindow() != target || !IsWindow(target)) return false;

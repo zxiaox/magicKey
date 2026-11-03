@@ -20,7 +20,7 @@ A portable, native Windows keyboard remapper. No installer, Python, .NET, servic
 
 ## Profile shortcuts and Warcraft chat
 
-The first ten profiles in list order have **Alt + 1** through **Alt + 9**, then **Alt + 0**. Their shortcuts appear in the profile selector. Use top-row digits; numpad digits remain separate. Selecting a profile with its shortcut enables remapping, saves the selection, and releases previous held output keys. Renaming keeps its slot; deleting a profile shifts later slots. Profiles beyond ten remain available in the selector. AltGr (Ctrl + Alt), Shift + Alt, plain digits, and unassigned slots keep their normal behavior. Held-key repeats do not switch repeatedly.
+The first ten profiles in list order have **Ctrl + Alt + 1** through **Ctrl + Alt + 9**, then **Ctrl + Alt + 0**. Their shortcuts appear in the profile selector. Use top-row digits; numpad digits remain separate. Selecting a profile with its shortcut enables remapping, saves the selection, and releases previous held output keys. Renaming keeps its slot; deleting a profile shifts later slots. Profiles beyond ten remain available in the selector. Use left Alt for profile shortcuts; right Alt/AltGr remains available for keyboard-layout input. Shift combinations, plain digits, numpad digits, and unassigned slots keep their normal behavior. Held-key repeats do not switch repeatedly.
 
 When Warcraft III is the foreground application, these shortcuts send **Configuration [profile name] enabled.**, with the actual name substituted. **Ctrl + Alt + F12** sends **magicKey enabled.** or **magicKey disabled.** Messages use the game's normal chat and its current/default audience, so other players can see them. They are not private local overlays. Notification text follows the software language: English, Simplified Chinese, Japanese, or Korean. Profile names retain their original characters.
 
@@ -42,7 +42,7 @@ Download **MagicKey-windows-x64-portable.zip** from [GitHub Releases](https://gi
 
 A release must first be published by the workflow below before the download links or in-app checks can return an executable. This source tree alone is not a published GitHub release.
 
-The app displays **MagicKey v1.6.1** in its heading. Windows file properties also contain the product name and version, generated from the single version in `CMakeLists.txt`.
+The app displays **MagicKey v1.7.0** in its heading. Windows file properties also contain the product name and version, generated from the single version in `CMakeLists.txt`.
 
 ## Build and publish (maintainers)
 
@@ -55,8 +55,8 @@ To publish a stable release:
 
    ```sh
    git push origin main
-   git tag v1.6.1
-   git push origin v1.6.1
+   git tag v1.7.0
+   git push origin v1.7.0
    ```
 
 3. Open **Actions → Build and release MagicKey**. After compilation, tests, and packaging succeed, the tag run creates a draft release with all four download assets, then publishes it as the latest stable release. A tag that differs from the compiled version fails before publication. Branch and pull-request runs never publish releases.
@@ -89,7 +89,7 @@ For manual recovery, close MagicKey, rename `MagicKey.exe.backup` to `MagicKey.e
 1. Open `MagicKey.exe`. The selected profile is enabled immediately. Use **Pause remapping** or **Ctrl + Alt + F12** if you want to pause it.
 2. Click the button under **From key**, then press and release the source key. Click the button under **To key**, then press and release the destination. Click **Add / update** to save the mapping. To block the source, click **Disabled** instead of capturing a destination. Selecting an existing row fills both buttons for editing. To remove a mapping, select its row and click **Remove** above the list.
 3. To create a profile, type a unique name in **Profile name** and click **New**. It starts with **Q → Numpad 7**, **W → Numpad 8**, and **R → Numpad 5**. You can edit or remove these mappings. To rename the selected profile, edit its name and click **Rename**. Switching profiles applies the saved mappings immediately if remapping is enabled.
-4. Check **Disable both Windows keys** if desired.
+4. Use **Settings → Disable Windows keys** to apply Windows-key blocking globally while remapping is enabled.
 5. Switch to the application where you want to use it. If you paused remapping, click **Enable remapping** first. Remapping deliberately bypasses the MagicKey editor so its controls stay usable.
 6. Press **Ctrl + Alt + F12** to toggle remapping from another application, or close MagicKey to stop.
 
@@ -110,7 +110,7 @@ Number labels distinguish **Top row 7** from **Numpad 7**, and likewise for ever
 
 The new version reads version-1 and version-2 profile files. An untouched legacy **Default** profile containing exactly A → Q and W → Numpad 7 (version 1), or top-row 7 → Q and 8 → W, is updated to **Numpad 7 → Q**, **Numpad 8 → W**, and **Numpad 5 → R**. Other profiles, including a customized Default profile, are preserved. Each profile created with **New** starts with **Q → Numpad 7**, **W → Numpad 8**, and **R → Numpad 5**. Existing empty profiles stay empty; the defaults are only applied on creation. These updates do not change the profile file format.
 
-The next settings change saves the version-2 format with language and output-mode preferences; older executables cannot read that format. Keep your backup if you need to downgrade.
+The next settings change saves the version-3 format with global Windows-key blocking and Quick Chat entries; older executables cannot read that format. Keep your backup if you need to downgrade.
 
 ## Warcraft III: typing works but abilities do not
 
@@ -159,3 +159,15 @@ Theme tests cover all four preference values, malformed appearance files, and te
 Taskbar identity: MagicKey sets explicit large/small window icons and the stable `zxiaox.MagicKey` AppUserModelID. Taskbar group/pinning properties point to the embedded icon and the current portable executable. These are restored after Explorer restarts. If an older pinned shortcut still shows a cached icon, unpin it, launch the updated MagicKey.exe, and pin the running app again. No system icon-cache deletion is required.
 
 Notification speed: Enter remains held for 80 ms; chat-open and text-settle waits are now 50 ms each instead of 300/250 ms. Multilingual paste adds a 50 ms Ctrl+V hold. With the UI timer, typical sequences take roughly 0.3–0.4 seconds after shortcut release. Actual game timing can differ. Diagnostics includes the exact intended message, helping distinguish name retrieval from text-input/display failures. Clipboard tools/history managers may observe the temporary notification text.
+
+## Numpad, mapping editor and Quick Chat (v1.7)
+
+Each profile separates **Custom Numeric Keypad** (7/8, 4/5, 1/2) from **Key Mapping**. The first section always refers to physical numpad keys; top-row numbers remain independent. Click a numpad replacement field, then press and release the replacement key to save immediately. `?` means the key is unchanged. Capture the same numpad key to restore it, or right-click a field to disable it or restore the original key. Other mappings stay in the general table.
+
+Selecting a general mapping fills the editor and sets **Update**. Changing its source and pressing Update replaces the original entry. **New mapping** starts an independent entry; **Add** changes to **Update** if its source already exists. Profile selection defaults to an existing general entry when one is present.
+
+**Windows-key blocking is global**, in Settings, and applies to every profile while remapping is enabled. During migration from version 1/2 settings, the previously selected profile's blocking flag supplies the initial global value. Existing mappings and named profiles are preserved. Version-3 files retain legacy profile flags for data round-tripping, but the app uses the global flag.
+
+Open **Quick Chat** from the sidebar or Settings. Select one of ten **Alt + 1–9, 0** slots, type a single-line message (up to 120 UTF-16 characters and 512 UTF-8 bytes), and click **Save**; **Clear** unassigns that slot. These entries are global, saved beside the profiles, and sent verbatim through the existing Warcraft chat transport only while Warcraft is foreground. They work even when key remapping is paused and do not change the active profile. Use with chat closed; game chat length and font limitations still apply. Profile switching now uses **Ctrl + Alt + 1–9, 0**, so the two functions do not compete. As before, only the first ten profiles have digit shortcuts.
+
+Settings are now written as `MYWARKEY 3`; keep a backup before downgrading to an older executable. Theme preferences remain in their separate file. Buttons use a consistent owner-drawn paint path, and dropdowns paint inside the Windows paint cycle rather than drawing again after native hover painting.

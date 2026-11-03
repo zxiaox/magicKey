@@ -3,6 +3,7 @@
 #include <string>
 #include "clipboard_text.hpp"
 namespace mywarkey {
+bool isWarcraftForeground(HWND window);
 class GameNotifications {
     ClipboardText clipboard;
     bool pasteHeld = false, clipboardFailed = false, classicUtf8 = false;

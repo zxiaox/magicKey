@@ -55,6 +55,8 @@ public static class ThemeWindow {
     [DllImport("user32.dll")] public static extern uint GetMenuState(IntPtr h, uint item, uint flags);
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr h, System.Text.StringBuilder text, int count);
     [DllImport("user32.dll", EntryPoint="GetClassLongPtrW")] public static extern IntPtr GetClassLongPtr(IntPtr h, int index);
+    [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr FindWindow(string kind, string title);
+    [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern bool SetWindowText(IntPtr h, string text);
     [DllImport("user32.dll")] public static extern bool UpdateWindow(IntPtr h);
     [DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr value);
 }
@@ -92,7 +94,7 @@ try {
         $language = $case[1]
         $name = $case[2]
         $profile = Join-Path $root 'mywarkey.profiles'
-        [IO.File]::WriteAllText($profile, "MYWARKEY 2 0 1 $language 1 `"Game`" 0 3 81 103 87 104 82 101`n")
+        [IO.File]::WriteAllText($profile, "MYWARKEY 2 0 1 $language 1 `"Game`" 0 5 103 81 104 87 101 82 65 90 83 88`n")
         [IO.File]::WriteAllText((Join-Path $root 'MagicKey.theme'), 'MAGICKEY_THEME 1 0')
         $profileHash = (Get-FileHash -LiteralPath $profile -Algorithm SHA256).Hash
         $process = Start-MagicKey
@@ -112,6 +114,9 @@ try {
         $created = [ThemeWindow]::RegisterWindowMessage('TaskbarCreated')
         $null = [ThemeWindow]::SendMessage($hwnd, $created, [IntPtr]::Zero, [IntPtr]::Zero)
         if ([ThemeWindow]::TaskbarProperty($hwnd, 3) -cne ($app + ',-101')) { throw 'Taskbar icon not restored' }
+        if ([ThemeWindow]::GetDlgItem($hwnd, 300) -eq [IntPtr]::Zero -or [ThemeWindow]::GetDlgItem($hwnd, 305) -eq [IntPtr]::Zero) { throw 'Dedicated numpad editor missing' }
+        if ([ThemeWindow]::GetDlgItem($hwnd, 111) -ne [IntPtr]::Zero) { throw 'Windows-key setting still lives in a profile control' }
+        if ([ThemeWindow]::SendMessage([ThemeWindow]::GetDlgItem($hwnd,106),0x1004,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -ne 2) { throw 'Dedicated keypad mappings leaked into general list' }
         $toggle = [ThemeWindow]::GetDlgItem($hwnd, 112)
         $activeLabel = New-Object Text.StringBuilder 256
         $null = [ThemeWindow]::GetWindowText($toggle, $activeLabel, 256)
@@ -189,7 +194,7 @@ try {
         $null = [ThemeWindow]::SendMessage($hwnd, 0x8001, [IntPtr]::Zero, [IntPtr]::Zero) # Pause first.
         $null = [ThemeWindow]::SendMessage($hwnd, 0x8005, [IntPtr]$index, [IntPtr]::Zero)
         $contents = [IO.File]::ReadAllText($profile)
-        if (!$contents.StartsWith("MYWARKEY 2 $index 11 0 1")) { throw "Profile slot $index did not persist" }
+        if (!$contents.StartsWith("MYWARKEY 3 $index 11 0 1")) { throw "Profile slot $index did not persist" }
         $label = New-Object Text.StringBuilder 256
         $null = [ThemeWindow]::GetWindowText([ThemeWindow]::GetDlgItem($hwnd, 112), $label, 256)
         if ($label.ToString() -cne 'Pause remapping') { throw 'Profile shortcut did not enable remapping' }
@@ -201,6 +206,57 @@ try {
     $process = Start-MagicKey
     $selection = [ThemeWindow]::SendMessage([ThemeWindow]::GetDlgItem($process.MainWindowHandle, 101), 0x147, [IntPtr]::Zero, [IntPtr]::Zero).ToInt32()
     if ($selection -ne 9) { throw 'Shortcut profile selection did not survive restart' }
+    # Empty profile starts at Add; after saving it becomes Update. Editing the
+    # selected row must replace its destination rather than append another row.
+    $hwnd = $process.MainWindowHandle
+    $button = [ThemeWindow]::GetDlgItem($hwnd,109)
+    $caption = New-Object Text.StringBuilder 256
+    $null = [ThemeWindow]::GetWindowText($button,$caption,256)
+    if ($caption.ToString() -cne 'Add') { throw 'Empty profile did not default to Add' }
+    $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]109,[IntPtr]::Zero)
+    $null = [ThemeWindow]::GetWindowText($button,$caption.Clear(),256)
+    if ($caption.ToString() -cne 'Update') { throw 'Existing mapping did not default to Update' }
+    $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]115,[IntPtr]::Zero) # Disabled target.
+    $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]109,[IntPtr]::Zero)
+    if ([ThemeWindow]::SendMessage([ThemeWindow]::GetDlgItem($hwnd,106),0x1004,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -ne 1) { throw 'Update appended a duplicate mapping' }
+    if (![IO.File]::ReadAllText($profile).Contains("65 0")) { throw 'Update did not replace the selected mapping' }
+    $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]120,[IntPtr]::Zero)
+    $null = [ThemeWindow]::GetWindowText($button,$caption.Clear(),256)
+    if ($caption.ToString() -cne 'Add') { throw 'New mapping did not reset to Add' }
+    # Windows-key blocking is global across profile changes.
+    $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]111,[IntPtr]::Zero)
+    $null = [ThemeWindow]::SendMessage($hwnd,0x8005,[IntPtr]::Zero,[IntPtr]::Zero)
+    if (![IO.File]::ReadAllText($profile).StartsWith("MYWARKEY 3 0 11 0 1 1")) { throw 'Global Windows-key setting lost on profile switch' }
+    # Save two independent Quick Chat slots and reopen to check persistence.
+    $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]121,[IntPtr]::Zero)
+    $chat = [ThemeWindow]::FindWindow('MagicKey.QuickChat',$null)
+    if ($chat -eq [IntPtr]::Zero) { throw 'Quick Chat editor missing' }
+    $slots = [ThemeWindow]::GetDlgItem($chat,401)
+    $edit = [ThemeWindow]::GetDlgItem($chat,402)
+    $null = [ThemeWindow]::SetWindowText($edit,'你好 诸葛亮')
+    $null = [ThemeWindow]::SendMessage($chat,0x111,[IntPtr]403,[IntPtr]::Zero)
+    $null = [ThemeWindow]::SendMessage($slots,0x14E,[IntPtr]9,[IntPtr]::Zero)
+    $null = [ThemeWindow]::SendMessage($chat,0x111,[IntPtr](401 -bor (1 -shl 16)),$slots)
+    $null = [ThemeWindow]::SetWindowText($edit,'Ready team')
+    $null = [ThemeWindow]::SendMessage($chat,0x111,[IntPtr]403,[IntPtr]::Zero)
+    $null = [ThemeWindow]::SendMessage($chat,0x10,[IntPtr]::Zero,[IntPtr]::Zero)
+    Close-MagicKey $process
+    $process = Start-MagicKey
+    $hwnd = $process.MainWindowHandle
+    $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]121,[IntPtr]::Zero)
+    $chat = [ThemeWindow]::FindWindow('MagicKey.QuickChat',$null)
+    $edit = [ThemeWindow]::GetDlgItem($chat,402)
+    $null = [ThemeWindow]::GetWindowText($edit,$caption.Clear(),256)
+    if ($caption.ToString() -cne '你好 诸葛亮') { throw 'Quick Chat slot 1 failed round trip' }
+    $slots = [ThemeWindow]::GetDlgItem($chat,401)
+    $null = [ThemeWindow]::SendMessage($slots,0x14E,[IntPtr]9,[IntPtr]::Zero)
+    $null = [ThemeWindow]::SendMessage($chat,0x111,[IntPtr](401 -bor (1 -shl 16)),$slots)
+    $null = [ThemeWindow]::GetWindowText($edit,$caption.Clear(),256)
+    if ($caption.ToString() -cne 'Ready team') { throw 'Quick Chat slot 0 failed round trip' }
+    $null = [ThemeWindow]::SendMessage($chat,0x111,[IntPtr]404,[IntPtr]::Zero)
+    $null = [ThemeWindow]::GetWindowText($edit,$caption.Clear(),256)
+    if ($caption.Length -ne 0) { throw 'Quick Chat clear did not clear slot' }
+    $null = [ThemeWindow]::SendMessage($chat,0x10,[IntPtr]::Zero,[IntPtr]::Zero)
     Close-MagicKey $process
     $process = $null
     Write-Host 'PASS: ten profile shortcut slots enable and persist; invalid slot ignored.'

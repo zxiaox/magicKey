@@ -23,10 +23,13 @@ public:
     HFONT body() const { return bodyFont; }
     HFONT smallTextFont() const { return smallFont; }
     HBRUSH background() const { return backgroundBrush; }
+    HBRUSH panel() const { return panelBrush; }
     HBRUSH input() const { return inputBrush; }
     HBRUSH staticBackground(HWND child, HWND root) const;
     void paint(HDC dc, const RECT& bounds, bool enabled, int language) const;
-    LRESULT button(NMCUSTOMDRAW* draw, ButtonRole role, bool listening) const;
+    LRESULT button(NMCUSTOMDRAW* draw, ButtonRole role, bool listening, bool checked = false) const;
+    void ownerButton(DRAWITEMSTRUCT* item, ButtonRole role, bool listening, bool checked = false) const;
+    void prepareButton(HWND button);
     LRESULT list(NMLVCUSTOMDRAW* draw) const;
     LRESULT header(NMCUSTOMDRAW* draw) const;
     void combo(DRAWITEMSTRUCT* draw) const;

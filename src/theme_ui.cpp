@@ -40,14 +40,28 @@ LRESULT CALLBACK listSubclass(HWND hwnd, UINT message, WPARAM w, LPARAM l, UINT_
     if (message == WM_NCDESTROY) RemoveWindowSubclass(hwnd, listSubclass, id);
     return DefSubclassProc(hwnd, message, w, l);
 }
+LRESULT CALLBACK buttonSubclass(HWND hwnd, UINT message, WPARAM w, LPARAM l, UINT_PTR id, DWORD_PTR value) {
+    if (message == WM_MOUSEMOVE && !GetPropW(hwnd, L"MagicKey.Hot")) {
+        SetPropW(hwnd, L"MagicKey.Hot", HANDLE(1));
+        TRACKMOUSEEVENT track{sizeof(track), TME_LEAVE, hwnd, 0}; TrackMouseEvent(&track);
+        InvalidateRect(hwnd, nullptr, FALSE);
+    } else if (message == WM_MOUSELEAVE || message == WM_KILLFOCUS || message == WM_ENABLE) {
+        RemovePropW(hwnd, L"MagicKey.Hot"); InvalidateRect(hwnd, nullptr, FALSE);
+    } else if (message == WM_NCDESTROY) {
+        RemovePropW(hwnd, L"MagicKey.Hot"); RemoveWindowSubclass(hwnd, buttonSubclass, id);
+    }
+    return DefSubclassProc(hwnd, message, w, l);
+}
 LRESULT CALLBACK comboSubclass(HWND hwnd, UINT message, WPARAM w, LPARAM l, UINT_PTR id, DWORD_PTR value) {
-    LRESULT result = DefSubclassProc(hwnd, message, w, l);
     auto ui = reinterpret_cast<ThemeUI*>(value);
     if (message == WM_PAINT) {
-        HDC dc = GetDC(hwnd); ui->comboFrame(hwnd, dc); ReleaseDC(hwnd, dc);
-    } else if (message == WM_PRINT || message == WM_PRINTCLIENT) {
-        ui->comboFrame(hwnd, reinterpret_cast<HDC>(w));
+        PAINTSTRUCT paint; HDC dc = BeginPaint(hwnd, &paint);
+        ui->comboFrame(hwnd, dc); EndPaint(hwnd, &paint); return 0;
     }
+    if (message == WM_PRINT || message == WM_PRINTCLIENT) {
+        ui->comboFrame(hwnd, reinterpret_cast<HDC>(w)); return 0;
+    }
+    LRESULT result = DefSubclassProc(hwnd, message, w, l);
     if (message == WM_NCDESTROY) RemoveWindowSubclass(hwnd, comboSubclass, id);
     return result;
 }
@@ -125,7 +139,7 @@ void ThemeUI::paint(HDC dc, const RECT& bounds, bool enabled, int language) cons
         }
         line(dc, 24, 103, 876, 103, p.border);
     }
-    for (RECT card : {RECT{24,118,270,592}, RECT{288,118,876,478}, RECT{288,494,876,592}, RECT{24,610,876,662}}) {
+    for (RECT card : {RECT{24,118,270,592}, RECT{288,118,876,270}, RECT{288,282,876,592}, RECT{24,610,876,662}}) {
         roundBox(dc, card, p.panel, p.border, selected == ThemeId::Warcraft ? 3 : 16);
         if (selected == ThemeId::Warcraft) {
             for (int x : {card.left + 6, card.right - 6}) for (int y : {card.top + 6, card.bottom - 6}) {
@@ -145,9 +159,9 @@ void ThemeUI::paint(HDC dc, const RECT& bounds, bool enabled, int language) cons
     text(dc, L"Ctrl + Alt + F12", {44,523,250,557}, strongFont, p.accent, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     text(dc, tr(L"Profiles save automatically."), {44,565,250,583}, smallFont, p.muted);
     roundBox(dc, {40,632,48,640}, enabled ? p.success : p.muted, enabled ? p.success : p.muted, 8);
-    text(dc, L"\x2192", {500,390,522,430}, strongFont, p.muted, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    text(dc, L"\x2192", {465,474,482,508}, strongFont, p.muted, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 }
-LRESULT ThemeUI::button(NMCUSTOMDRAW* draw, ButtonRole role, bool listening) const {
+LRESULT ThemeUI::button(NMCUSTOMDRAW* draw, ButtonRole role, bool listening, bool checked) const {
     if (draw->dwDrawStage != CDDS_PREPAINT) return CDRF_DODEFAULT;
     const auto& p = colors();
     HWND button = draw->hdr.hwndFrom;
@@ -158,7 +172,6 @@ LRESULT ThemeUI::button(NMCUSTOMDRAW* draw, ButtonRole role, bool listening) con
     if (role == ButtonRole::Checkbox) {
         fill(draw->hdc, draw->rc, p.panel);
         RECT check{box.left + 1, box.top + (box.bottom - box.top - 17) / 2, box.left + 18, box.top + (box.bottom - box.top - 17) / 2 + 17};
-        const bool checked = SendMessageW(button, BM_GETCHECK, 0, 0) == BST_CHECKED;
         roundBox(draw->hdc, check, checked ? p.accent : p.control, hot ? p.accent : p.border, 5);
         if (checked) {
             line(draw->hdc, check.left + 4, check.top + 8, check.left + 7, check.top + 11, p.accentInk, 2);
@@ -178,6 +191,18 @@ LRESULT ThemeUI::button(NMCUSTOMDRAW* draw, ButtonRole role, bool listening) con
         RECT focus = draw->rc; InflateRect(&focus, -4, -4); DrawFocusRect(draw->hdc, &focus);
     }
     return CDRF_SKIPDEFAULT;
+}
+void ThemeUI::prepareButton(HWND button) {
+    SetWindowTheme(button, L"", L"");
+    SetWindowSubclass(button, buttonSubclass, 1, 0);
+}
+void ThemeUI::ownerButton(DRAWITEMSTRUCT* item, ButtonRole role, bool listening, bool checked) const {
+    NMCUSTOMDRAW draw{}; draw.hdr.hwndFrom = item->hwndItem; draw.hdr.idFrom = item->CtlID;
+    draw.dwDrawStage = CDDS_PREPAINT; draw.hdc = item->hDC; draw.rc = item->rcItem;
+    if (item->itemState & ODS_SELECTED) draw.uItemState |= CDIS_SELECTED;
+    if (item->itemState & ODS_FOCUS) draw.uItemState |= CDIS_FOCUS;
+    if (GetPropW(item->hwndItem, L"MagicKey.Hot")) draw.uItemState |= CDIS_HOT;
+    button(&draw, role, listening, checked);
 }
 LRESULT ThemeUI::list(NMLVCUSTOMDRAW* draw) const {
     if (draw->nmcd.dwDrawStage == CDDS_PREPAINT) return CDRF_NOTIFYITEMDRAW;

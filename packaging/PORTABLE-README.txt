@@ -57,3 +57,14 @@ may observe temporary notification text.
 If no message appears, open Settings > Notification diagnostics after trying.
 Background games and other apps never receive these messages. Actual game
 compatibility depends on your Warcraft version, settings and privileges.
+
+VERSION 1.7 CHANGES
+Profile shortcuts: Ctrl + Alt + top-row 1..9, then 0 (use left Alt).
+Quick Chat: Alt + top-row 1..9, then 0. Open Quick Chat, choose a slot,
+type a message and click Save. Clear removes the assignment. Messages send
+only to foreground Warcraft, even when remapping is paused.
+Custom Numeric Keypad edits numpad 7/8, 4/5, 1/2 per profile. Click a field
+and press the replacement; right-click to disable or restore. General mappings
+have separate Add/Update actions and a New mapping button.
+Disable Windows keys is global under Settings. The selected legacy profile's
+preference migrates to the global setting. Saving upgrades profiles to version 3.

@@ -4,6 +4,21 @@
 namespace mywarkey {
 struct Translation { const wchar_t *en, *zh, *ja, *ko; };
 inline constexpr Translation translations[] = {
+    {L"Custom Numeric Keypad", L"自定义数字键盘", L"テンキーのカスタマイズ", L"숫자 키패드 사용자 지정"},
+    {L"Key Mapping", L"按键映射", L"キー割り当て", L"키 매핑"},
+    {L"Add", L"添加", L"追加", L"추가"},
+    {L"Update", L"更新", L"更新", L"수정"},
+    {L"New mapping", L"新建映射", L"新しい割り当て", L"새 매핑"},
+    {L"Disable Windows keys", L"禁用 Windows 键", L"Windows キーを無効化", L"Windows 키 비활성화"},
+    {L"Quick Chat", L"快捷聊天", L"クイックチャット", L"빠른 채팅"},
+    {L"Alt + 1–0: Quick Chat", L"Alt + 1–0：快捷聊天", L"Alt + 1–0：クイックチャット", L"Alt + 1–0: 빠른 채팅"},
+    {L"Quick Chat shortcut", L"快捷聊天键位", L"クイックチャットのショートカット", L"빠른 채팅 단축키"},
+    {L"Message", L"消息", L"メッセージ", L"메시지"},
+    {L"Save", L"保存", L"保存", L"저장"},
+    {L"Clear", L"清空", L"クリア", L"지우기"},
+    {L"Restore original key", L"恢复原按键", L"元のキーに戻す", L"원래 키 복원"},
+    {L"Saved messages send only while Warcraft is foreground. Use with chat closed.", L"仅在魔兽争霸位于前台时发送已保存的消息。请先关闭聊天框。", L"保存したメッセージは Warcraft が最前面のときのみ送信します。チャットを閉じて使用してください。", L"저장된 메시지는 Warcraft가 전경일 때만 전송됩니다. 채팅창을 닫고 사용하세요."},
+    {L"Quick Chat message is too long.", L"快捷聊天消息过长。", L"クイックチャットのメッセージが長すぎます。", L"빠른 채팅 메시지가 너무 깁니다."},
     {L"Configuration {name} enabled.", L"配置「{name}」已启用。", L"設定「{name}」を有効にしました。", L"설정 「{name}」이 활성화되었습니다."},
     {L"magicKey enabled.", L"magicKey 已启用。", L"magicKey を有効にしました。", L"magicKey가 활성화되었습니다."},
     {L"magicKey disabled.", L"magicKey 已停用。", L"magicKey を無効にしました。", L"magicKey가 비활성화되었습니다."},

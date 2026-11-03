@@ -25,6 +25,8 @@ struct Settings {
     std::size_t selected = 0;
     int language = 0; // English, Simplified Chinese, Japanese, Korean.
     bool scanCodes = true;
+    bool blockWindows = false;
+    std::array<std::string, 10> quickChat{};
     std::vector<Profile> profiles{{"Default", false, defaultMappings()}};
 };
 
@@ -34,14 +36,19 @@ inline Settings readSettings(std::istream& in) {
     int version;
     std::size_t count;
     if (!(in >> magic >> version >> result.selected >> count) || magic != "MYWARKEY" ||
-        (version != 1 && version != 2) || count == 0 || count > 100)
+        (version < 1 || version > 3) || count == 0 || count > 100)
         throw std::runtime_error("Invalid profile file header.");
-    if (version == 2) {
+    if (version >= 2) {
         int scanCodes;
         if (!(in >> result.language >> scanCodes) || result.language < 0 || result.language > 3 ||
             (scanCodes != 0 && scanCodes != 1))
             throw std::runtime_error("Invalid application preferences.");
         result.scanCodes = scanCodes != 0;
+    }
+    if (version >= 3) {
+        int blocked;
+        if (!(in >> blocked) || (blocked != 0 && blocked != 1)) throw std::runtime_error("Invalid global Windows-key setting.");
+        result.blockWindows = blocked != 0;
     }
     result.profiles.clear();
     for (std::size_t i = 0; i < count; ++i) {
@@ -64,9 +71,18 @@ inline Settings readSettings(std::istream& in) {
         }
         result.profiles.push_back(std::move(p));
     }
+    if (version >= 3) {
+        std::string marker; int slots;
+        if (!(in >> marker >> slots) || marker != "QUICKCHAT" || slots != 10) throw std::runtime_error("Invalid quick chat settings.");
+        for (auto& message : result.quickChat) {
+            if (!(in >> std::quoted(message)) || message.size() > 512) throw std::runtime_error("Invalid quick chat message.");
+            for (unsigned char c : message) if (c < 32 || c == 127) throw std::runtime_error("Quick chat must be a single line.");
+        }
+    }
     in >> std::ws;
     if (!in.eof() || result.selected >= result.profiles.size())
         throw std::runtime_error("Invalid profile file contents.");
+    if (version < 3) result.blockWindows = result.profiles[result.selected].blockWindows;
     for (auto& p : result.profiles)
         if (p.name == "Default" && !p.blockWindows &&
             ((version == 1 && p.mappings == std::map<int, int>{{'A', 'Q'}, {'W', 0x67}}) ||
@@ -76,12 +92,14 @@ inline Settings readSettings(std::istream& in) {
 }
 
 inline void writeSettings(std::ostream& out, const Settings& settings) {
-    out << "MYWARKEY 2 " << settings.selected << ' ' << settings.profiles.size() << ' '
-        << settings.language << ' ' << settings.scanCodes << '\n';
+    out << "MYWARKEY 3 " << settings.selected << ' ' << settings.profiles.size() << ' '
+        << settings.language << ' ' << settings.scanCodes << ' ' << settings.blockWindows << '\n';
     for (const auto& p : settings.profiles) {
         out << std::quoted(p.name) << ' ' << p.blockWindows << ' ' << p.mappings.size() << '\n';
         for (auto [from, to] : p.mappings) out << from << ' ' << to << '\n';
     }
+    out << "QUICKCHAT 10\n";
+    for (const auto& message : settings.quickChat) out << std::quoted(message) << '\n';
     if (!out) throw std::runtime_error("Could not write profiles.");
 }
 

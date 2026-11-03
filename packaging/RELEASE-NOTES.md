@@ -1,10 +1,15 @@
 Portable MagicKey for Windows 10/11 x64. End users do not need Visual Studio or an installer.
 
-New in this version: corrected the clipboard encoding used by classic Warcraft notifications. Classic targets now receive **UTF-8 bytes in CF_TEXT**, rather than depending on Windows to convert UTF-16 into the system ANSI code page. Modern recognized Warcraft executables retain Unicode clipboard text.
+New in this version:
 
-English messages now paste as complete text too, avoiding dropped letters and keyboard-layout/Caps Lock effects from rapid scan-code typing. Translations and names are tested against exact expected messages in all four languages, including **诸葛亮**, using a classic-style narrow UTF-8 clipboard reader. The earlier receiver tested only Unicode clipboard reads.
+- Each profile has a **Custom Numeric Keypad** grid for numpad 7/8, 4/5, 1/2 and a separate **Key Mapping** table. Click a keypad destination to capture/save it; right-click to disable or restore the key.
+- Existing mapping selection defaults to **Update**. **New mapping** starts a separate entry; the action label changes dynamically between **Add** and **Update**. Editing the source replaces the selected entry.
+- **Disable Windows keys** moved to global Settings. Migration preserves the selected profile's previous blocking preference as the global value.
+- Profile shortcuts are now **Ctrl + Alt + 1–9, 0** (left Alt).
+- **Quick Chat** provides ten saved custom messages on **Alt + 1–9, 0**, sent verbatim only while Warcraft is foreground. Open its editor from the sidebar or Settings.
+- Refined button and dropdown painting to address hover artifacts across themes.
 
-The shorter timings, clipboard preservation, profiles, themes and shortcuts are preserved. Diagnostics reports the selected transport. Actual Warcraft acceptance still needs verification in the game.
+Existing profiles and mappings are preserved. Saving upgrades the settings file to version 3, including global Windows-key blocking and Quick Chat; older executables cannot read this version. Quick Chat uses the existing game chat/clipboard transport. Use it during gameplay with chat closed; game-specific length/font/input limitations still apply.
 
 Download **MagicKey-windows-x64-portable.zip**, extract it into a writable folder, and run **MagicKey.exe**. The executable is also available separately for existing installations and the in-app updater. The source-code archives are intended for developers.
 

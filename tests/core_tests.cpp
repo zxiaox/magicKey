@@ -31,23 +31,27 @@ int main() {
     require(press.toggle); active = !active; require(active);
     require(shortcut.event(0x7B, false, true, true, true).swallow);
     require(!shortcut.event(0x7B, true, false, false, false).swallow);
-    ProfileHotkeys profileKeys;
+    ProfileHotkeys profileKeys, quickKeys(false);
     for (int i = 0; i < 10; ++i) {
         int digit = i == 9 ? '0' : '1' + i;
         require(profileDigit(digit) == i);
-        auto selected = profileKeys.event(digit, true, false, true, false, false, 10);
+        auto selected = profileKeys.event(digit, true, false, true, true, false, 10);
         require(selected.swallow && selected.index == i);
-        require(profileKeys.event(digit, true, true, true, false, false, 10).index == -1);
-        // Consume key-up even after modifiers are released or profiles deleted.
+        require(profileKeys.event(digit, true, true, true, true, false, 10).index == -1);
         require(profileKeys.event(digit, false, true, false, false, false, 0).swallow);
-        require(!profileKeys.event(digit, true, false, true, true, false, 10).swallow); // AltGr.
-        require(!profileKeys.event(digit, true, false, true, false, true, 10).swallow);
-        require(!profileKeys.event(digit, true, false, false, false, false, 10).swallow);
+        require(!profileKeys.event(digit, true, false, true, false, false, 10).swallow);
+        require(!profileKeys.event(digit, true, false, true, true, true, 10).swallow);
+        auto chat = quickKeys.event(digit, true, false, true, false, false, 10);
+        require(chat.swallow && chat.index == i);
+        require(quickKeys.event(digit, true, true, true, false, false, 10).index == -1);
+        require(quickKeys.event(digit, false, true, false, false, false, 0).swallow);
+        require(!quickKeys.event(digit, true, false, true, true, false, 10).swallow); // AltGr.
     }
-    require(!profileKeys.event('2', true, false, true, false, false, 1).swallow);
-    require(!profileKeys.event('1', true, true, true, false, false, 10).swallow);
-    require(!profileKeys.event(0x61, true, false, true, false, false, 10).swallow); // Numpad 1.
-    require(profileShortcut(0) == L"Alt + 1" && profileShortcut(9) == L"Alt + 0" && profileShortcut(10).empty());
+    require(!profileKeys.event('2', true, false, true, true, false, 1).swallow);
+    require(!profileKeys.event('1', true, true, true, true, false, 10).swallow);
+    require(!profileKeys.event(0x61, true, false, true, true, false, 10).swallow);
+    require(profileShortcut(0) == L"Ctrl + Alt + 1" && profileShortcut(9) == L"Ctrl + Alt + 0" && profileShortcut(10).empty());
+    require(customNumpadKey(0x67) && customNumpadKey(0x62) && !customNumpadKey('7') && !customNumpadKey(0x63));
     require(warcraftExecutable(L"War3.exe") && warcraftExecutable(L"Warcraft III.exe"));
     require(warcraftExecutable(L"WARCRAFT III REFORGED.EXE"));
     require(!warcraftExecutable(L"notepad.exe") && !warcraftExecutable(L"War3.exe.bak"));
@@ -67,6 +71,9 @@ int main() {
     Settings settings;
     require(settings.profiles[0].mappings == std::map<int, int>{{0x67, 'Q'}, {0x68, 'W'}, {0x65, 'R'}});
     require(settings.scanCodes && settings.language == 0);
+    settings.blockWindows = true;
+    settings.quickChat[0] = "你好，诸葛亮";
+    settings.quickChat[9] = "Ready \"now\" \\ team";
     settings.language = 3;
     settings.scanCodes = false;
     settings.profiles.push_back({"Game \"two\" \\ backup", true, {{0x5B, 0}, {'X', 'Q'}}});
@@ -74,6 +81,10 @@ int main() {
     std::stringstream file;
     writeSettings(file, settings);
     auto loaded = readSettings(file);
+    require(loaded.blockWindows && loaded.quickChat == settings.quickChat);
+    std::istringstream oldGlobal("MYWARKEY 2 1 2 0 1 \"Off\" 0 0 \"On\" 1 0");
+    auto globalMigration = readSettings(oldGlobal);
+    require(globalMigration.blockWindows && globalMigration.quickChat[0].empty());
     require(loaded.selected == 1 && loaded.profiles.size() == 2);
     require(loaded.profiles[1].name == settings.profiles[1].name);
     require(loaded.profiles[1].blockWindows && loaded.profiles[0].mappings.at(0x68) == 'W');
