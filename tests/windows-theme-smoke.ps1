@@ -210,7 +210,7 @@ try {
         $null = [ThemeWindow]::SendMessage($hwnd, 0x8001, [IntPtr]::Zero, [IntPtr]::Zero) # Pause first.
         $null = [ThemeWindow]::SendMessage($hwnd, 0x8005, [IntPtr]$index, [IntPtr]::Zero)
         $contents = [IO.File]::ReadAllText($profile)
-        if (!$contents.StartsWith("MYWARKEY 4 $index 11 0 1")) { throw "Profile slot $index did not persist" }
+        if (!$contents.StartsWith("MYWARKEY 5 $index 11 0 1")) { throw "Profile slot $index did not persist" }
         $label = New-Object Text.StringBuilder 256
         $null = [ThemeWindow]::GetWindowText([ThemeWindow]::GetDlgItem($hwnd, 112), $label, 256)
         if ($label.ToString() -cne 'Pause remapping') { throw 'Profile shortcut did not enable remapping' }
@@ -242,7 +242,7 @@ try {
     # Windows-key blocking is global across profile changes.
     $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]111,[IntPtr]::Zero)
     $null = [ThemeWindow]::SendMessage($hwnd,0x8005,[IntPtr]::Zero,[IntPtr]::Zero)
-    if (![IO.File]::ReadAllText($profile).StartsWith("MYWARKEY 4 0 11 0 1 1")) { throw 'Global Windows-key setting lost on profile switch' }
+    if (![IO.File]::ReadAllText($profile).StartsWith("MYWARKEY 5 0 11 0 1 1")) { throw 'Global Windows-key setting lost on profile switch' }
     # Route a captured replacement into the dedicated numpad mapping and
     # verify it stays out of the general table. Generation is intentionally
     # opaque; stale capture messages must be ignored until the current token.
@@ -256,6 +256,11 @@ try {
     }
     if ($caption.ToString() -cne 'T' -or ![IO.File]::ReadAllText($profile).Contains('84 103')) { throw 'Numpad destination capture did not save' }
     if ([ThemeWindow]::SendMessage([ThemeWindow]::GetDlgItem($hwnd,106),0x1004,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -ne 0) { throw 'Captured numpad mapping appeared in general table' }
+    # Legacy input chords remain editable. New entries default to output mode.
+    $mode = [ThemeWindow]::GetDlgItem($hwnd,418)
+    if ([ThemeWindow]::SendMessage($mode,0x147,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -ne 1) { throw 'New macro did not default to Together output' }
+    $null = [ThemeWindow]::SendMessage($mode,0x14E,[IntPtr]::Zero,[IntPtr]::Zero)
+    $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr](418 -bor (1 -shl 16)),$mode)
     # Create A+B -> D, then add the third key through capture and update it.
     $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]415,[IntPtr]::Zero)
     if ([ThemeWindow]::SendMessage([ThemeWindow]::GetDlgItem($hwnd,410),0x18B,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -ne 1) { throw 'Two-key combination did not save' }
@@ -268,7 +273,12 @@ try {
     }
     if ($caption.ToString() -cne 'C') { throw 'Third combination key capture failed' }
     $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]415,[IntPtr]::Zero)
-    if (![IO.File]::ReadAllText($profile).Contains('3 65 66 67 68')) { throw 'Three-key combination did not update' }
+    if (![IO.File]::ReadAllText($profile).Contains('0 3 65 66 67 68')) { throw 'Three-key combination did not update' }
+    # Convert the selected rule to sequential D -> A,B,C and persist the mode.
+    $null = [ThemeWindow]::SendMessage($mode,0x14E,[IntPtr]2,[IntPtr]::Zero)
+    $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr](418 -bor (1 -shl 16)),$mode)
+    $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]415,[IntPtr]::Zero)
+    if (![IO.File]::ReadAllText($profile).Contains('2 3 65 66 67 68')) { throw 'Sequential output mode did not persist' }
     # Save two independent Quick Chat slots and reopen to check persistence.
     $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]121,[IntPtr]::Zero)
     $chat = [ThemeWindow]::FindWindow('MagicKey.QuickChat','Quick Chat')

@@ -40,6 +40,32 @@ int main() {
     engine.event('A',false,p,true,send,840); require(sent == Events{{'D',true}});
     engine.event('Z',false,p,true,send,850); require(sent == Events{{'D',true},{'D',false}});
     engine.release(send);
+    // One physical D produces multiple output keys; injected outputs are not
+    // fed through the profile's ordinary A -> X mapping.
+    sent.clear(); Remapper together;
+    Profile output{"Output",false,{{'A','X'}},{{{'A','B','C'},'D',CombinationMode::Together}}};
+    require(together.event('D',true,output,true,send,0));
+    require(sent == Events{{'A',true},{'B',true},{'C',true}});
+    together.event('D',true,output,true,send,10); together.event('D',false,output,true,send,20);
+    together.tick(60,output,true,send);
+    require(sent == Events{{'A',true},{'B',true},{'C',true},{'C',false},{'B',false},{'A',false}});
+    sent.clear(); Remapper sequence;
+    output.combinations = {{{'B','A','B'},'D',CombinationMode::Sequence}};
+    sequence.event('D',true,output,true,send,0); sequence.event('D',false,output,true,send,10);
+    sequence.tick(60,output,true,send); sequence.tick(80,output,true,send);
+    sequence.tick(140,output,true,send); sequence.tick(160,output,true,send); sequence.tick(220,output,true,send);
+    require(sent == Events{{'B',true},{'B',false},{'A',true},{'A',false},{'B',true},{'B',false}});
+    sent.clear(); sequence.event('D',true,output,true,send,300); sequence.release(send);
+    sequence.tick(1000,output,true,send); require(sent == Events{{'B',true},{'B',false}});
+    sent.clear(); Remapper modifiers;
+    output.combinations = {{{'C',0xA2},'D',CombinationMode::Together}};
+    modifiers.event('D',true,output,true,send,0); modifiers.tick(60,output,true,send);
+    require(sent == Events{{0xA2,true},{'C',true},{'C',false},{0xA2,false}});
+    output.combinations = {{{'B','A','B'},'D',CombinationMode::Sequence}};
+    Settings macroSettings; macroSettings.profiles[0].combinations = output.combinations;
+    std::stringstream macroFile; writeSettings(macroFile,macroSettings); auto macroRead = readSettings(macroFile);
+    require(macroRead.profiles[0].combinations[0].mode == CombinationMode::Sequence && macroRead.profiles[0].combinations[0].keys == std::vector<int>{'B','A','B'});
+    require(combinationKeys({0xA2,'C'},CombinationMode::Together) == std::vector<int>{0xA2,'C'});
     Settings settings; settings.profiles[0].combinations = p.combinations; settings.quickChat[3] = "诸葛亮"; settings.quickChatSlot = 3;
     std::stringstream file; writeSettings(file,settings); auto loaded = readSettings(file);
     require(loaded.profiles[0].combinations.size() == 2 && loaded.profiles[0].combinations[1].keys == std::vector<int>{'A','B','C'});
@@ -51,6 +77,10 @@ int main() {
     require(old.selected == 1 && old.blockWindows && old.quickChat[0] == "诸葛亮" && old.profiles[0].combinations.empty());
     std::stringstream migrated; writeSettings(migrated,old); auto again = readSettings(migrated);
     require(again.quickChat == old.quickChat && again.profiles[0].mappings == old.profiles[0].mappings);
+    std::stringstream legacyChord;
+    legacyChord << "MYWARKEY 4 0 1 0 1 0 0 \"Old\" 0 0 1 2 65 66 68 QUICKCHAT 10 ";
+    for (int i=0;i<10;++i) legacyChord << "\"\" ";
+    require(readSettings(legacyChord).profiles[0].combinations[0].mode == CombinationMode::InputChord);
     for (auto keys : {std::vector<int>{'A'}, std::vector<int>{'A','A'}, std::vector<int>{'A','B','C','D'}}) {
         bool failed = false; try { combinationKeys(keys); } catch (...) { failed = true; } require(failed);
     }

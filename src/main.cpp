@@ -20,7 +20,9 @@ constexpr UINT ToggleMessage = WM_APP + 1, InputError = WM_APP + 2, CapturedKey 
 enum ControlId { ProfileBox = 101, NewProfile, RenameProfile, DeleteProfile, ProfileName,
     MappingList, SourceBox, TargetBox, AddMapping, RemoveMapping, BlockWindows, Toggle, LanguageBox, ScanCodes, DisableTarget, CheckUpdates, ThemeBox, SectionProfile, SectionMappings, NewMapping, QuickChatOpen };
 constexpr int NumpadBase = 300;
-constexpr int ComboList = 410, ComboFirst = 411, ComboSecond = 412, ComboThird = 413, ComboTarget = 414, ComboSave = 415, ComboNew = 416, ComboRemove = 417;
+constexpr int ComboList = 410, ComboFirst = 411, ComboSecond = 412, ComboThird = 413, ComboTarget = 414, ComboSave = 415, ComboNew = 416, ComboRemove = 417, ComboMode = 418;
+CombinationMode comboMode = CombinationMode::Together;
+HWND comboModeBox, comboHint;
 HWND comboList;
 std::array<HWND,4> comboButtons{};
 std::array<int,3> comboSources{'A','B',0};
@@ -333,6 +335,11 @@ void updateCaptureButtons() {
         auto label = comboCapture == i && slot != CaptureSlot::None ? std::wstring(tr(L"Press a key...")) : value ? keyName(value) : std::wstring(L"-");
         SetWindowTextW(comboButtons[i],label.c_str());
     }
+    SendMessageW(comboModeBox,CB_RESETCONTENT,0,0);
+    for (auto name : {L"Input chord",L"Together",L"Sequence"}) SendMessageW(comboModeBox,CB_ADDSTRING,0,LPARAM(tr(name)));
+    SendMessageW(comboModeBox,CB_SETCURSEL,int(comboMode),0);
+    SetWindowTextW(comboHint,tr(comboMode == CombinationMode::InputChord ? L"Press 2–3 keys within 150 ms. Right-click the third key to clear it." : L"Right key triggers the left keys. Right-click the third key to clear it."));
+    InvalidateRect(window,nullptr,FALSE);
     SetWindowTextW(GetDlgItem(window,ComboSave),tr(comboSelection >= 0 ? L"Update" : L"Add"));
     for (int i = 0; i < 6; ++i) {
         auto found = std::find_if(mappings.begin(),mappings.end(),[i](const auto& entry) { return entry.second == CustomNumpadKeys[i]; });
@@ -414,8 +421,8 @@ void refresh() {
     const auto& p = settings.profiles[settings.selected];
     SetWindowTextW(nameEdit, wide(p.name).c_str());
     if (editorProfile != p.name) {
-        comboSelection = -1; comboSources = {'A','B',0}; comboDestination = 'D';
-        if (!p.combinations.empty()) { comboSelection = 0; const auto& c = p.combinations[0]; comboSources = {c.keys[0],c.keys[1],c.keys.size() == 3 ? c.keys[2] : 0}; comboDestination = c.target; }
+        comboSelection = -1; comboMode = CombinationMode::Together; comboSources = {'A','B',0}; comboDestination = 'D';
+        if (!p.combinations.empty()) { comboSelection = 0; const auto& c = p.combinations[0]; comboMode = c.mode; comboSources = {c.keys[0],c.keys[1],c.keys.size() == 3 ? c.keys[2] : 0}; comboDestination = c.target; }
         editorProfile = p.name; editingSource = -1; sourceChoice = 'A'; targetChoice = 'Q';
         for (auto [from, to] : p.mappings) if (!customNumpadKey(to)) { editingSource = sourceChoice = from; targetChoice = to; break; }
     }
@@ -437,7 +444,12 @@ void refresh() {
     for (const auto& c : p.combinations) {
         std::wstring label;
         for (int key : c.keys) { if (!label.empty()) label += L" + "; label += keyName(key); }
-        label += L"  \x2192  " + keyName(c.target);
+        if (c.mode == CombinationMode::InputChord) label += L"  \x2192  " + keyName(c.target);
+        else {
+            label = keyName(c.target) + L"  \x2192  ";
+            for (int key : c.keys) { if (label.back() != L' ') label += c.mode == CombinationMode::Together ? L" + " : L" \x2192 "; label += keyName(key); }
+            label += c.mode == CombinationMode::Together ? L"  [" + std::wstring(tr(L"Together")) + L"]" : L"  [" + std::wstring(tr(L"Sequence")) + L"]";
+        }
         SendMessageW(comboList,LB_ADDSTRING,0,LPARAM(label.c_str()));
     }
     SendMessageW(comboList,LB_SETCURSEL,comboSelection,0);
@@ -498,7 +510,10 @@ void makeInterface() {
     control(L"BUTTON",L"Disabled",WS_TABSTOP,DisableTarget,650,408,90,30);
     control(L"BUTTON",L"Add",WS_TABSTOP,AddMapping,750,408,104,30);
     control(L"STATIC",L"Click a key, then press its replacement.",0,0,360,442,494,16);
-    control(L"STATIC",L"Multi-Key Combinations",0,0,360,484,270,20);
+    control(L"STATIC",L"Combinations",0,0,360,484,106,20);
+    comboModeBox = control(WC_COMBOBOXW,L"",CBS_DROPDOWNLIST | WS_TABSTOP,ComboMode,470,478,184,200);
+    for (auto mode : {L"Input chord",L"Together",L"Sequence"}) SendMessageW(comboModeBox,CB_ADDSTRING,0,LPARAM(tr(mode)));
+    SendMessageW(comboModeBox,CB_SETITEMHEIGHT,WPARAM(-1),28);
     control(L"BUTTON",L"New",WS_TABSTOP,ComboNew,666,478,88,28);
     control(L"BUTTON",L"Remove",WS_TABSTOP,ComboRemove,766,478,88,28);
     comboList = control(L"LISTBOX",L"",LBS_NOTIFY | LBS_NOINTEGRALHEIGHT | WS_VSCROLL | WS_TABSTOP,ComboList,360,510,494,48);
@@ -507,7 +522,7 @@ void makeInterface() {
     comboButtons[2] = control(L"BUTTON",L"",WS_TABSTOP,ComboThird,564,570,82,30);
     comboButtons[3] = control(L"BUTTON",L"",WS_TABSTOP,ComboTarget,672,570,74,30);
     control(L"BUTTON",L"Add",WS_TABSTOP,ComboSave,758,570,96,30);
-    control(L"STATIC",L"Press 2–3 keys within 150 ms. Right-click the third key to clear it.",0,0,360,610,494,30);
+    comboHint = control(L"STATIC",L"Press 2–3 keys within 150 ms. Right-click the third key to clear it.",0,0,360,610,494,30);
     statusLabel = control(L"STATIC",L"",0,0,58,692,590,22);
     SendMessageW(statusLabel,WM_SETFONT,WPARAM(font),TRUE);
     toggleButton = control(L"BUTTON",L"",WS_TABSTOP,Toggle,676,686,178,32);
@@ -648,13 +663,16 @@ void command(int id, int notification) {
     if (id == ProfileName || (notification != BN_CLICKED && notification != CBN_SELCHANGE && notification != LBN_SELCHANGE)) return;
     cancelCapture();
     if (id >= ThemeMenu && id < ThemeMenu + 4) { changeTheme(id - ThemeMenu); return; }
+    if (id == ComboMode && notification == CBN_SELCHANGE) {
+        comboMode = CombinationMode(SendMessageW(comboModeBox,CB_GETCURSEL,0,0)); updateCaptureButtons(); return;
+    }
     if (id == ComboList && notification == LBN_SELCHANGE) {
         int index = int(SendMessageW(comboList,LB_GETCURSEL,0,0));
         const auto& list = settings.profiles[settings.selected].combinations;
-        if (index >= 0 && index < int(list.size())) { comboSelection = index; const auto& c = list[index]; comboSources = {c.keys[0],c.keys[1],c.keys.size()==3 ? c.keys[2] : 0}; comboDestination = c.target; updateCaptureButtons(); }
+        if (index >= 0 && index < int(list.size())) { comboSelection = index; const auto& c = list[index]; comboMode = c.mode; comboSources = {c.keys[0],c.keys[1],c.keys.size()==3 ? c.keys[2] : 0}; comboDestination = c.target; updateCaptureButtons(); }
         return;
     }
-    if (id == ComboNew) { comboSelection = -1; comboSources = {'A','B',0}; comboDestination = 'D'; SendMessageW(comboList,LB_SETCURSEL,WPARAM(-1),0); updateCaptureButtons(); return; }
+    if (id == ComboNew) { comboSelection = -1; comboMode = CombinationMode::Together; comboSources = {'A','B',0}; comboDestination = 'D'; SendMessageW(comboList,LB_SETCURSEL,WPARAM(-1),0); updateCaptureButtons(); return; }
     if (id == ComboSave || id == ComboRemove) {
         auto candidate = settings; auto& list = candidate.profiles[candidate.selected].combinations;
         if (id == ComboRemove) {
@@ -663,11 +681,12 @@ void command(int id, int notification) {
         } else {
             try {
                 std::vector<int> keys{comboSources[0],comboSources[1]}; if (comboSources[2]) keys.push_back(comboSources[2]);
-                keys = combinationKeys(std::move(keys));
-                for (int i = 0; i < int(list.size()); ++i) if (i != comboSelection && list[i].keys == keys) throw std::runtime_error("That combination already exists.");
+                if (comboMode != CombinationMode::InputChord && comboDestination == 0) throw std::runtime_error("Choose a trigger key.");
+                keys = combinationKeys(std::move(keys),comboMode);
+                for (int i = 0; i < int(list.size()); ++i) if (i != comboSelection && (comboMode == CombinationMode::InputChord ? list[i].mode == comboMode && list[i].keys == keys : list[i].mode != CombinationMode::InputChord && list[i].target == comboDestination)) throw std::runtime_error("That combination already exists.");
                 if (comboSelection < 0 && list.size() >= 100) throw std::runtime_error("Too many combinations.");
-                if (comboSelection >= 0 && comboSelection < int(list.size())) list[comboSelection] = {keys,comboDestination};
-                else { list.push_back({keys,comboDestination}); comboSelection = int(list.size())-1; }
+                if (comboSelection >= 0 && comboSelection < int(list.size())) list[comboSelection] = {keys,comboDestination,comboMode};
+                else { list.push_back({keys,comboDestination,comboMode}); comboSelection = int(list.size())-1; }
             } catch (const std::exception& e) { error(wide(e.what())); return; }
         }
         commit(std::move(candidate)); refresh(); return;
@@ -745,14 +764,14 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
             HDC memory = CreateCompatibleDC(dc);
             HBITMAP bitmap = CreateCompatibleBitmap(dc, bounds.right, bounds.bottom);
             auto old = SelectObject(memory, bitmap);
-            themeUI.paint(memory, bounds, enabled, settings.language);
+            themeUI.paint(memory, bounds, enabled, settings.language, comboMode != CombinationMode::InputChord);
             BitBlt(dc, 0, 0, bounds.right, bounds.bottom, memory, 0, 0, SRCCOPY);
             SelectObject(memory, old); DeleteObject(bitmap); DeleteDC(memory);
             EndPaint(hwnd, &paint); return 0;
         }
         case WM_PRINTCLIENT: {
             RECT bounds; GetClientRect(hwnd, &bounds);
-            themeUI.paint(reinterpret_cast<HDC>(w), bounds, enabled, settings.language);
+            themeUI.paint(reinterpret_cast<HDC>(w), bounds, enabled, settings.language, comboMode != CombinationMode::InputChord);
             return 0;
         }
         case WM_MEASUREITEM: {

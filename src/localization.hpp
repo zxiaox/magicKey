@@ -4,6 +4,12 @@
 namespace mywarkey {
 struct Translation { const wchar_t *en, *zh, *ja, *ko; };
 inline constexpr Translation translations[] = {
+    {L"Choose a trigger key.", L"请选择触发按键。", L"トリガーキーを指定してください。", L"실행 키를 선택하세요."},
+    {L"Combinations", L"组合", L"組み合わせ", L"조합"},
+    {L"Input chord", L"输入组合", L"入力コード", L"입력 조합"},
+    {L"Together", L"同时输出", L"同時出力", L"동시 출력"},
+    {L"Sequence", L"依次输出", L"順次出力", L"순차 출력"},
+    {L"Right key triggers the left keys. Right-click the third key to clear it.", L"右侧按键触发左侧按键。右键点击第三键可清除。", L"右のキーで左のキーを出力。3番目は右クリックで解除。", L"오른쪽 키가 왼쪽 키를 출력합니다. 세 번째는 우클릭으로 지웁니다."},
     {L"Configuration Schemes", L"配置方案", L"設定プロファイル", L"설정 프로필"},
     {L"Multi-Key Combinations", L"多键组合", L"複数キーの組み合わせ", L"다중 키 조합"},
     {L"Click a key, then press its replacement.", L"点击按键后，按下替换键。", L"キーをクリックして置き換えるキーを押します。", L"키를 클릭한 다음 대체 키를 누르세요."},

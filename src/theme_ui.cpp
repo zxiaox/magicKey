@@ -119,7 +119,7 @@ HBRUSH ThemeUI::staticBackground(HWND child, HWND root) const {
     RECT rect; GetWindowRect(child, &rect); MapWindowPoints(nullptr, root, reinterpret_cast<POINT*>(&rect), 2);
     return rect.top >= 118 ? panelBrush : backgroundBrush;
 }
-void ThemeUI::paint(HDC dc, const RECT& bounds, bool enabled, int language) const {
+void ThemeUI::paint(HDC dc, const RECT& bounds, bool enabled, int language, bool reverseCombo) const {
     const auto& p = colors();
     auto tr = [language](const wchar_t* s) { return mywarkey::translate(s, language); };
     fill(dc, bounds, p.background);
@@ -161,7 +161,7 @@ void ThemeUI::paint(HDC dc, const RECT& bounds, bool enabled, int language) cons
     roundBox(dc, {40,698,48,706}, enabled ? p.success : p.muted, enabled ? p.success : p.muted, 8);
     text(dc, L"+", {442,570,462,600}, strongFont,p.muted,DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     text(dc, L"+", {544,570,564,600}, strongFont,p.muted,DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-    text(dc, L"\x2192", {646,570,672,600}, strongFont,p.muted,DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    text(dc, reverseCombo ? L"\x2190" : L"\x2192", {646,570,672,600}, strongFont,p.muted,DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     text(dc, L"\x2192", {492,408,506,438}, strongFont, p.muted, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 }
 LRESULT ThemeUI::button(NMCUSTOMDRAW* draw, ButtonRole role, bool listening, bool checked) const {

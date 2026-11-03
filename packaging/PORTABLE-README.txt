@@ -78,3 +78,10 @@ combinations keep their normal key behavior. Game-compatible input is in Setting
 Quick Chat is global across profiles, autosaves, remembers the selected slot,
 and shows Saving/Saved/Not saved. Save writes immediately. Switching profiles
 preserves an open draft. Saving upgrades data to version 4 (reads versions 1-3).
+
+VERSION 1.9 OUTPUT MODES
+Together: right-hand trigger D sends left-hand A+B+C together.
+Sequence: D taps A, then B, then C in the entered order.
+Existing Input chord rules retain A+B+C -> D. New rules default to Together.
+One macro runs at a time; repeats do not restart it. Pause/profile/focus changes
+cancel generated input. Saving upgrades settings to version 5 (reads versions 1-4).
