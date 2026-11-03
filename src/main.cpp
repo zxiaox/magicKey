@@ -490,9 +490,11 @@ LRESULT CALLBACK quickChatProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
         case WM_CREATE: {
             auto child = [hwnd](const wchar_t* type, const wchar_t* label, DWORD style, int id, int x, int y, int width, int height) {
                 if (std::wstring_view(type) == L"BUTTON") style = (style & ~BS_TYPEMASK) | BS_OWNERDRAW;
+                if (std::wstring_view(type) == WC_COMBOBOXW) style |= CBS_OWNERDRAWFIXED | CBS_HASSTRINGS;
                 HWND item = CreateWindowExW(0, type, tr(label), WS_CHILD | WS_VISIBLE | style, x,y,width,height,hwnd,HMENU(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);
                 SendMessageW(item, WM_SETFONT, WPARAM(font), TRUE);
                 if (std::wstring_view(type) == L"BUTTON") themeUI.prepareButton(item);
+                if (std::wstring_view(type) == WC_COMBOBOXW) themeUI.prepareCombo(item);
                 return item;
             };
             child(L"STATIC", L"Quick Chat shortcut", 0, 0, 20,18,560,24);
@@ -508,7 +510,8 @@ LRESULT CALLBACK quickChatProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
             child(L"STATIC", L"Saved messages send only while Warcraft is foreground. Use with chat closed.",0,0,20,177,560,48);
             child(L"BUTTON", L"Save", WS_TABSTOP,403,320,240,120,34);
             child(L"BUTTON", L"Clear", WS_TABSTOP,404,460,240,120,34);
-            loadQuickChatSlot(); magickey::setWindowIdentity(hwnd); return 0;
+            SendMessageW(quickSlotBox, CB_SETITEMHEIGHT, WPARAM(-1), 28);
+            loadQuickChatSlot(); themeUI.apply(hwnd, nullptr, themeUI.theme()); magickey::setWindowIdentity(hwnd); return 0;
         }
         case WM_COMMAND: {
             int id = LOWORD(w);
@@ -526,8 +529,14 @@ LRESULT CALLBACK quickChatProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
             }
             break;
         }
+        case WM_MEASUREITEM: {
+            auto item = reinterpret_cast<MEASUREITEMSTRUCT*>(l);
+            if (item->CtlType == ODT_COMBOBOX) { item->itemHeight = 28; return TRUE; }
+            break;
+        }
         case WM_DRAWITEM: {
             auto item = reinterpret_cast<DRAWITEMSTRUCT*>(l);
+            if (item->CtlType == ODT_COMBOBOX) { themeUI.combo(item); return TRUE; }
             if (item->CtlType == ODT_BUTTON) { themeUI.ownerButton(item, item->CtlID == 403 ? magickey::ButtonRole::Primary : magickey::ButtonRole::Secondary, false); return TRUE; }
             break;
         }

@@ -257,6 +257,15 @@ try {
     $slots = [ThemeWindow]::GetDlgItem($chat,401)
     $edit = [ThemeWindow]::GetDlgItem($chat,402)
     $null = [ThemeWindow]::SetWindowText($edit,'你好 诸葛亮')
+    $rect = New-Object ThemeWindow+Rect
+    $null = [ThemeWindow]::GetWindowRect($chat,[ref]$rect)
+    $preview = New-Object Drawing.Bitmap ($rect.Right-$rect.Left),($rect.Bottom-$rect.Top)
+    $graphics = [Drawing.Graphics]::FromImage($preview)
+    $dc = $graphics.GetHdc()
+    try { if (![ThemeWindow]::PrintWindow($chat,$dc,2)) { throw 'Quick Chat preview failed' } }
+    finally { $graphics.ReleaseHdc($dc); $graphics.Dispose() }
+    try { $preview.Save((Join-Path $output 'quick-chat.png'),[Drawing.Imaging.ImageFormat]::Png) }
+    finally { $preview.Dispose() }
     $null = [ThemeWindow]::SendMessage($chat,0x111,[IntPtr]403,[IntPtr]::Zero)
     $null = [ThemeWindow]::SendMessage($slots,0x14E,[IntPtr]9,[IntPtr]::Zero)
     $null = [ThemeWindow]::SendMessage($chat,0x111,[IntPtr](401 -bor (1 -shl 16)),$slots)
