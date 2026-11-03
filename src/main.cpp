@@ -216,7 +216,7 @@ LRESULT CALLBACK keyboardProc(int code, WPARAM message, LPARAM value) {
     auto chatKey = quickChatHotkeys.event(source, down, wasDown, physical[VK_LMENU] || physical[VK_RMENU],
         physical[VK_LCONTROL] || physical[VK_RCONTROL], physical[VK_LSHIFT] || physical[VK_RSHIFT], eligible ? 10 : 0);
     if (chatKey.swallow) {
-        { std::lock_guard<std::mutex> lock(engineMutex); engine.release(sendKey); capture.cancel(); ++captureGeneration; }
+        { std::lock_guard<std::mutex> lock(engineMutex); if (chatKey.index >= 0) { engine.release(sendKey); capture.cancel(); ++captureGeneration; } else if (!down) capture.event(source, false, wasDown); }
         if (chatKey.index >= 0) PostMessageW(window, QuickChatSend, chatKey.index, LPARAM(GetForegroundWindow()));
         return 1;
     }
@@ -728,7 +728,7 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
         }
         case CapturedKey: {
             bool current;
-            { std::lock_guard<std::mutex> lock(engineMutex); current = unsigned(w) == captureGeneration; }
+            { std::lock_guard<std::mutex> lock(engineMutex); current = unsigned(w) == captureGeneration; if (current) capture.cancel(); }
             if (current && GetForegroundWindow() == window) {
                 if (numpadEditing >= 0) {
                     int from = CustomNumpadKeys[numpadEditing], to = LOWORD(l);

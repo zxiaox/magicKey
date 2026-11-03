@@ -57,6 +57,7 @@ public static class ThemeWindow {
     [DllImport("user32.dll", EntryPoint="GetClassLongPtrW")] public static extern IntPtr GetClassLongPtr(IntPtr h, int index);
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr FindWindow(string kind, string title);
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern bool SetWindowText(IntPtr h, string text);
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
     [DllImport("user32.dll")] public static extern bool UpdateWindow(IntPtr h);
     [DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr value);
 }
@@ -146,6 +147,15 @@ try {
         if (([ThemeWindow]::GetMenuState($themes, [uint32](2010 + $theme), 0) -band 8) -eq 0) { throw 'Theme menu selection did not persist' }
         $languages = [ThemeWindow]::GetSubMenu($options, 0)
         if (([ThemeWindow]::GetMenuState($languages, [uint32](2000 + $language), 0) -band 8) -eq 0) { throw 'Language menu selection did not persist' }
+        # Exercise hover/leave repainting of a keycap, action button, checkbox
+        # and combo before every palette/language screenshot.
+        foreach ($control in 107,109,114,101,300) {
+            $item = [ThemeWindow]::GetDlgItem($hwnd,$control)
+            $null = [ThemeWindow]::SendMessage($item,0x200,[IntPtr]::Zero,[IntPtr]0x00100010)
+            $null = [ThemeWindow]::UpdateWindow($item)
+            $null = [ThemeWindow]::SendMessage($item,0x2A3,[IntPtr]::Zero,[IntPtr]::Zero)
+            $null = [ThemeWindow]::UpdateWindow($item)
+        }
         $null = [ThemeWindow]::UpdateWindow($hwnd)
         Start-Sleep -Milliseconds 200
         $rect = New-Object ThemeWindow+Rect
@@ -227,6 +237,19 @@ try {
     $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]111,[IntPtr]::Zero)
     $null = [ThemeWindow]::SendMessage($hwnd,0x8005,[IntPtr]::Zero,[IntPtr]::Zero)
     if (![IO.File]::ReadAllText($profile).StartsWith("MYWARKEY 3 0 11 0 1 1")) { throw 'Global Windows-key setting lost on profile switch' }
+    # Route a captured replacement into the dedicated numpad mapping and
+    # verify it stays out of the general table. Generation is intentionally
+    # opaque; stale capture messages must be ignored until the current token.
+    $null = [ThemeWindow]::SetForegroundWindow($hwnd)
+    $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]300,[IntPtr]::Zero)
+    $pad = [ThemeWindow]::GetDlgItem($hwnd,300)
+    foreach ($generation in 0..64) {
+        $null = [ThemeWindow]::SendMessage($hwnd,0x8003,[IntPtr]$generation,[IntPtr](84 -bor (2 -shl 16)))
+        $null = [ThemeWindow]::GetWindowText($pad,$caption.Clear(),256)
+        if ($caption.ToString() -ceq 'T') { break }
+    }
+    if ($caption.ToString() -cne 'T' -or ![IO.File]::ReadAllText($profile).Contains('103 84')) { throw 'Numpad destination capture did not save' }
+    if ([ThemeWindow]::SendMessage([ThemeWindow]::GetDlgItem($hwnd,106),0x1004,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -ne 0) { throw 'Captured numpad mapping appeared in general table' }
     # Save two independent Quick Chat slots and reopen to check persistence.
     $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]121,[IntPtr]::Zero)
     $chat = [ThemeWindow]::FindWindow('MagicKey.QuickChat',$null)
