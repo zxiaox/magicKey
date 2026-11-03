@@ -256,7 +256,7 @@ try {
     if ($chat -eq [IntPtr]::Zero) { throw 'Quick Chat editor missing' }
     $slots = [ThemeWindow]::GetDlgItem($chat,401)
     $edit = [ThemeWindow]::GetDlgItem($chat,402)
-    $null = [ThemeWindow]::SetWindowText($edit,'你好 诸葛亮')
+    if (![ThemeWindow]::SetWindowText($edit,'你好 诸葛亮')) { throw 'Quick Chat message edit could not be set' }
     $rect = New-Object ThemeWindow+Rect
     $null = [ThemeWindow]::GetWindowRect($chat,[ref]$rect)
     $preview = New-Object Drawing.Bitmap ($rect.Right-$rect.Left),($rect.Bottom-$rect.Top)
@@ -267,6 +267,7 @@ try {
     try { $preview.Save((Join-Path $output 'quick-chat.png'),[Drawing.Imaging.ImageFormat]::Png) }
     finally { $preview.Dispose() }
     $null = [ThemeWindow]::SendMessage($chat,0x111,[IntPtr]403,[IntPtr]::Zero)
+    if (![IO.File]::ReadAllText($profile).Contains('你好 诸葛亮')) { throw ('Quick Chat save failed: ' + [IO.File]::ReadAllText($profile)) }
     $null = [ThemeWindow]::SendMessage($slots,0x14E,[IntPtr]9,[IntPtr]::Zero)
     $null = [ThemeWindow]::SendMessage($chat,0x111,[IntPtr](401 -bor (1 -shl 16)),$slots)
     $null = [ThemeWindow]::SetWindowText($edit,'Ready team')
@@ -279,7 +280,7 @@ try {
     $chat = [ThemeWindow]::FindWindow('MagicKey.QuickChat','Quick Chat')
     $edit = [ThemeWindow]::GetDlgItem($chat,402)
     $null = [ThemeWindow]::GetWindowText($edit,$caption.Clear(),256)
-    if ($caption.ToString() -cne '你好 诸葛亮') { throw 'Quick Chat slot 1 failed round trip' }
+    if ($caption.ToString() -cne '你好 诸葛亮') { throw ('Quick Chat slot 1 failed round trip; actual=' + $caption.ToString() + '; window=' + $chat + '; edit=' + $edit + '; file=' + [IO.File]::ReadAllText($profile)) }
     $slots = [ThemeWindow]::GetDlgItem($chat,401)
     $null = [ThemeWindow]::SendMessage($slots,0x14E,[IntPtr]9,[IntPtr]::Zero)
     $null = [ThemeWindow]::SendMessage($chat,0x111,[IntPtr](401 -bor (1 -shl 16)),$slots)
