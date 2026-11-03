@@ -8,7 +8,7 @@ Default mappings: Numpad 7 -> Q, Numpad 8 -> W, Numpad 5 -> R.
 Profiles created with New start with Q -> Numpad 7, W -> Numpad 8,
 and R -> Numpad 5. Existing profiles keep their saved mappings.
 Top-row numbers are unchanged. The app starts enabled with the selected profile.
-Click a From/To key button, press and release a key, then click Add / update.
+Click a From/To key button, press and release a key, then click Add or Update.
 Switch to your game. Ctrl + Alt + F12 toggles remapping on/off.
 Close the app to stop remapping. The interface is available in four languages.
 Choose Settings > Theme in the top menu: Ivory, Midnight, Arcane, or Warcraft III.
@@ -42,7 +42,7 @@ Language is available under Settings > Language. Ctrl + Alt + F12 toggles
 remapping on/off at any time. The Warcraft artwork and app icon are built into the EXE.
 
 PROFILE SHORTCUTS AND GAME CHAT
-Alt + top-row 1..9, then 0 selects and enables profiles 1..10 in list order.
+Ctrl + Alt + top-row 1..9, then 0 selects/enables profiles 1..10.
 Their shortcuts appear in the profile list. Numpad digits are unchanged.
 When Warcraft III is foreground, these shortcuts send:
 Configuration [actual profile name] enabled.
