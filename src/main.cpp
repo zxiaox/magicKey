@@ -323,7 +323,7 @@ void updateCaptureButtons() {
     CaptureSlot slot;
     { std::lock_guard<std::mutex> lock(engineMutex); slot = capture.activeSlot(); }
     auto source = slot == CaptureSlot::Source ? std::wstring(tr(L"Press a key...")) : keyName(sourceChoice);
-    auto target = slot == CaptureSlot::Target ? std::wstring(tr(L"Press a key...")) : keyName(targetChoice);
+    auto target = slot == CaptureSlot::Target && numpadEditing < 0 && comboCapture < 0 ? std::wstring(tr(L"Press a key...")) : keyName(targetChoice);
     SetWindowTextW(sourceBox, source.c_str());
     SetWindowTextW(targetBox, target.c_str());
     const auto& mappings = settings.profiles[settings.selected].mappings;
@@ -766,7 +766,7 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
                 CaptureSlot slot;
                 { std::lock_guard<std::mutex> lock(engineMutex); slot = capture.activeSlot(); }
                 bool listening = (slot == CaptureSlot::Source && item->CtlID == SourceBox) ||
-                    (slot == CaptureSlot::Target && ((numpadEditing < 0 && item->CtlID == TargetBox) || item->CtlID == NumpadBase + numpadEditing || (comboCapture >= 0 && item->CtlID == ComboFirst+comboCapture)));
+                    (slot == CaptureSlot::Target && ((numpadEditing < 0 && comboCapture < 0 && item->CtlID == TargetBox) || item->CtlID == NumpadBase + numpadEditing || (comboCapture >= 0 && item->CtlID == ComboFirst+comboCapture)));
                 themeUI.ownerButton(item, role, listening, settings.scanCodes); return TRUE;
             }
             break;
