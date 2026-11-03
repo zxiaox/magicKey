@@ -56,7 +56,10 @@ public static class ThemeWindow {
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr h, System.Text.StringBuilder text, int count);
     [DllImport("user32.dll", EntryPoint="GetClassLongPtrW")] public static extern IntPtr GetClassLongPtr(IntPtr h, int index);
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr FindWindow(string kind, string title);
-    [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern bool SetWindowText(IntPtr h, string text);
+    [DllImport("user32.dll", EntryPoint="SendMessageW", CharSet=CharSet.Unicode)] private static extern IntPtr SendText(IntPtr h, uint message, IntPtr w, string text);
+    [DllImport("user32.dll", EntryPoint="SendMessageW", CharSet=CharSet.Unicode)] private static extern IntPtr ReadText(IntPtr h, uint message, IntPtr w, System.Text.StringBuilder text);
+    public static bool SetControlText(IntPtr h, string text) { return SendText(h,0xC,IntPtr.Zero,text) != IntPtr.Zero; }
+    public static int GetControlText(IntPtr h, System.Text.StringBuilder text, int count) { return ReadText(h,0xD,new IntPtr(count),text).ToInt32(); }
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
     [DllImport("user32.dll")] public static extern bool UpdateWindow(IntPtr h);
     [DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr value);
@@ -256,7 +259,7 @@ try {
     if ($chat -eq [IntPtr]::Zero) { throw 'Quick Chat editor missing' }
     $slots = [ThemeWindow]::GetDlgItem($chat,401)
     $edit = [ThemeWindow]::GetDlgItem($chat,402)
-    if (![ThemeWindow]::SetWindowText($edit,'你好 诸葛亮')) { throw 'Quick Chat message edit could not be set' }
+    if (![ThemeWindow]::SetControlText($edit,'你好 诸葛亮')) { throw 'Quick Chat message edit could not be set' }
     $rect = New-Object ThemeWindow+Rect
     $null = [ThemeWindow]::GetWindowRect($chat,[ref]$rect)
     $preview = New-Object Drawing.Bitmap ($rect.Right-$rect.Left),($rect.Bottom-$rect.Top)
@@ -270,7 +273,7 @@ try {
     if (![IO.File]::ReadAllText($profile).Contains('你好 诸葛亮')) { throw ('Quick Chat save failed: ' + [IO.File]::ReadAllText($profile)) }
     $null = [ThemeWindow]::SendMessage($slots,0x14E,[IntPtr]9,[IntPtr]::Zero)
     $null = [ThemeWindow]::SendMessage($chat,0x111,[IntPtr](401 -bor (1 -shl 16)),$slots)
-    $null = [ThemeWindow]::SetWindowText($edit,'Ready team')
+    $null = [ThemeWindow]::SetControlText($edit,'Ready team')
     $null = [ThemeWindow]::SendMessage($chat,0x111,[IntPtr]403,[IntPtr]::Zero)
     $null = [ThemeWindow]::SendMessage($chat,0x10,[IntPtr]::Zero,[IntPtr]::Zero)
     Close-MagicKey $process
@@ -279,15 +282,15 @@ try {
     $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]121,[IntPtr]::Zero)
     $chat = [ThemeWindow]::FindWindow('MagicKey.QuickChat','Quick Chat')
     $edit = [ThemeWindow]::GetDlgItem($chat,402)
-    $null = [ThemeWindow]::GetWindowText($edit,$caption.Clear(),256)
+    $null = [ThemeWindow]::GetControlText($edit,$caption.Clear(),256)
     if ($caption.ToString() -cne '你好 诸葛亮') { throw ('Quick Chat slot 1 failed round trip; actual=' + $caption.ToString() + '; window=' + $chat + '; edit=' + $edit + '; file=' + [IO.File]::ReadAllText($profile)) }
     $slots = [ThemeWindow]::GetDlgItem($chat,401)
     $null = [ThemeWindow]::SendMessage($slots,0x14E,[IntPtr]9,[IntPtr]::Zero)
     $null = [ThemeWindow]::SendMessage($chat,0x111,[IntPtr](401 -bor (1 -shl 16)),$slots)
-    $null = [ThemeWindow]::GetWindowText($edit,$caption.Clear(),256)
+    $null = [ThemeWindow]::GetControlText($edit,$caption.Clear(),256)
     if ($caption.ToString() -cne 'Ready team') { throw 'Quick Chat slot 0 failed round trip' }
     $null = [ThemeWindow]::SendMessage($chat,0x111,[IntPtr]404,[IntPtr]::Zero)
-    $null = [ThemeWindow]::GetWindowText($edit,$caption.Clear(),256)
+    $null = [ThemeWindow]::GetControlText($edit,$caption.Clear(),256)
     if ($caption.Length -ne 0) { throw 'Quick Chat clear did not clear slot' }
     $null = [ThemeWindow]::SendMessage($chat,0x10,[IntPtr]::Zero,[IntPtr]::Zero)
     Close-MagicKey $process
