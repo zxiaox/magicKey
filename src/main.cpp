@@ -630,6 +630,11 @@ void openQuickChat() {
     ShowWindow(quickChatWindow,SW_SHOW); SetForegroundWindow(quickChatWindow);
 }
 void command(int id, int notification) {
+    if (id == ComboMode && notification == CBN_SELCHANGE) {
+        int selected = int(SendMessageW(comboModeBox,CB_GETCURSEL,0,0));
+        if (selected < 0 || selected > 2) return;
+        cancelCapture(); comboMode = CombinationMode(selected); updateCaptureButtons(); return;
+    }
     if (id >= ComboFirst && id <= ComboTarget && notification == BN_CLICKED) {
         int field = id-ComboFirst; bool again = comboCapture == field;
         cancelCapture();
@@ -663,9 +668,6 @@ void command(int id, int notification) {
     if (id == ProfileName || (notification != BN_CLICKED && notification != CBN_SELCHANGE && notification != LBN_SELCHANGE)) return;
     cancelCapture();
     if (id >= ThemeMenu && id < ThemeMenu + 4) { changeTheme(id - ThemeMenu); return; }
-    if (id == ComboMode && notification == CBN_SELCHANGE) {
-        comboMode = CombinationMode(SendMessageW(comboModeBox,CB_GETCURSEL,0,0)); updateCaptureButtons(); return;
-    }
     if (id == ComboList && notification == LBN_SELCHANGE) {
         int index = int(SendMessageW(comboList,LB_GETCURSEL,0,0));
         const auto& list = settings.profiles[settings.selected].combinations;
