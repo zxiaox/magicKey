@@ -141,7 +141,7 @@ void ThemeUI::paint(HDC dc, const RECT& bounds, bool enabled, int language) cons
         }
         line(dc, 24, 103, 876, 103, p.border);
     }
-    for (RECT card : {RECT{24,118,876,198}, RECT{24,210,320,592}, RECT{338,210,876,404}, RECT{338,416,876,592}, RECT{24,610,876,662}}) {
+    for (RECT card : {RECT{24,118,876,198}, RECT{24,210,320,592}, RECT{338,210,876,460}, RECT{338,472,876,650}, RECT{24,676,876,728}}) {
         roundBox(dc, card, p.panel, p.border, selected == ThemeId::Warcraft ? 3 : 16);
         if (selected == ThemeId::Warcraft) {
             for (int x : {card.left + 6, card.right - 6}) for (int y : {card.top + 6, card.bottom - 6}) {
@@ -158,11 +158,11 @@ void ThemeUI::paint(HDC dc, const RECT& bounds, bool enabled, int language) cons
     text(dc, tr(L"Toggle remapping"), {44,516,300,536}, smallFont, p.muted);
     roundBox(dc, {44,542,300,576}, p.control, p.border, 8);
     text(dc, L"Ctrl + Alt + F12", {44,542,300,576}, strongFont, p.accent, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-    roundBox(dc, {40,632,48,640}, enabled ? p.success : p.muted, enabled ? p.success : p.muted, 8);
-    text(dc, L"+", {442,514,462,544}, strongFont,p.muted,DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-    text(dc, L"+", {544,514,564,544}, strongFont,p.muted,DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-    text(dc, L"\x2192", {646,514,672,544}, strongFont,p.muted,DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-    text(dc, L"\x2192", {492,352,506,382}, strongFont, p.muted, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    roundBox(dc, {40,698,48,706}, enabled ? p.success : p.muted, enabled ? p.success : p.muted, 8);
+    text(dc, L"+", {442,570,462,600}, strongFont,p.muted,DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    text(dc, L"+", {544,570,564,600}, strongFont,p.muted,DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    text(dc, L"\x2192", {646,570,672,600}, strongFont,p.muted,DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    text(dc, L"\x2192", {492,408,506,438}, strongFont, p.muted, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 }
 LRESULT ThemeUI::button(NMCUSTOMDRAW* draw, ButtonRole role, bool listening, bool checked) const {
     if (draw->dwDrawStage != CDDS_PREPAINT) return CDRF_DODEFAULT;
@@ -217,7 +217,11 @@ LRESULT ThemeUI::list(NMLVCUSTOMDRAW* draw) const {
     fill(draw->nmcd.hdc, rect, selectedRow ? p.selection : p.panel);
     const int divider = ListView_GetColumnWidth(list, 0);
     for (int column = 0; column < 2; ++column) {
-        wchar_t label[512]{}; ListView_GetItemText(list, row, column, label, 512);
+        wchar_t label[512]{};
+        LVITEMW value{}; value.mask = LVIF_PARAM; value.iItem = row; ListView_GetItem(list,&value);
+        auto root = GetParent(list);
+        SendMessageW(root,WM_APP+20,WPARAM(value.lParam),LPARAM(label));
+        if (column) SendMessageW(root,WM_APP+21,WPARAM(value.lParam),LPARAM(label));
         SIZE size{}; auto old = SelectObject(draw->nmcd.hdc, strongFont);
         GetTextExtentPoint32W(draw->nmcd.hdc, label, int(wcslen(label)), &size); SelectObject(draw->nmcd.hdc, old);
         int left = column ? divider + 12 : 12;

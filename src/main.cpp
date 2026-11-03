@@ -335,9 +335,9 @@ void updateCaptureButtons() {
     }
     SetWindowTextW(GetDlgItem(window,ComboSave),tr(comboSelection >= 0 ? L"Update" : L"Add"));
     for (int i = 0; i < 6; ++i) {
-        auto found = mappings.find(CustomNumpadKeys[i]);
+        auto found = std::find_if(mappings.begin(),mappings.end(),[i](const auto& entry) { return entry.second == CustomNumpadKeys[i]; });
         auto text = numpadEditing == i && slot == CaptureSlot::Target ? std::wstring(tr(L"Press a key...")) :
-            found == mappings.end() ? std::wstring(L"?") : keyName(found->second);
+            found == mappings.end() ? std::wstring{} : keyName(found->first);
         SetWindowTextW(numpadButtons[i], text.c_str());
     }
 }
@@ -417,20 +417,20 @@ void refresh() {
         comboSelection = -1; comboSources = {'A','B',0}; comboDestination = 'D';
         if (!p.combinations.empty()) { comboSelection = 0; const auto& c = p.combinations[0]; comboSources = {c.keys[0],c.keys[1],c.keys.size() == 3 ? c.keys[2] : 0}; comboDestination = c.target; }
         editorProfile = p.name; editingSource = -1; sourceChoice = 'A'; targetChoice = 'Q';
-        for (auto [from, to] : p.mappings) if (!customNumpadKey(from)) { editingSource = sourceChoice = from; targetChoice = to; break; }
+        for (auto [from, to] : p.mappings) if (!customNumpadKey(to)) { editingSource = sourceChoice = from; targetChoice = to; break; }
     }
     if (editingSource >= 0 && !p.mappings.count(editingSource)) editingSource = -1;
     refreshingMappings = true;
     ListView_DeleteAllItems(mappingList);
     for (auto [from, to] : p.mappings) {
-        if (customNumpadKey(from)) continue;
+        if (customNumpadKey(to)) continue;
         auto source = keyName(from), target = keyName(to);
         LVITEMW item{};
-        item.mask = LVIF_TEXT | LVIF_PARAM;
+        item.mask = LVIF_PARAM;
         item.iItem = ListView_GetItemCount(mappingList);
-        item.pszText = source.data(); item.lParam = from;
+        item.lParam = from;
         int row = ListView_InsertItem(mappingList, &item);
-        ListView_SetItemText(mappingList, row, 1, target.data());
+        
         if (from == editingSource) ListView_SetItemState(mappingList, row, LVIS_SELECTED, LVIS_SELECTED);
     }
     SendMessageW(comboList,LB_RESETCONTENT,0,0);
@@ -483,7 +483,7 @@ void makeInterface() {
     control(L"BUTTON",L"Remove",WS_TABSTOP,RemoveMapping,766,216,88,30);
     control(L"STATIC",L"When you press",0,0,372,250,190,20);
     control(L"STATIC",L"Send instead",0,0,584,250,250,20);
-    mappingList = control(WC_LISTVIEWW,L"",LVS_REPORT | LVS_NOCOLUMNHEADER | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_SHAREIMAGELISTS | WS_TABSTOP,MappingList,360,274,494,64);
+    mappingList = control(WC_LISTVIEWW,L"",LVS_REPORT | LVS_NOCOLUMNHEADER | LVS_NOLABELWRAP | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_SHAREIMAGELISTS | WS_TABSTOP,MappingList,360,274,494,124);
     ListView_SetExtendedListViewStyle(mappingList,LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER);
     HWND tip = ListView_SetToolTips(mappingList,nullptr);
     if (tip) DestroyWindow(tip);
@@ -493,24 +493,24 @@ void makeInterface() {
     LVCOLUMNW column{}; column.mask = LVCF_TEXT | LVCF_WIDTH;
     column.pszText = const_cast<wchar_t*>(L"When you press"); column.cx = 212; ListView_InsertColumn(mappingList,0,&column);
     column.pszText = const_cast<wchar_t*>(L"Send instead"); column.cx = 282; ListView_InsertColumn(mappingList,1,&column);
-    sourceBox = control(L"BUTTON",L"",WS_TABSTOP,SourceBox,360,352,132,30);
-    targetBox = control(L"BUTTON",L"",WS_TABSTOP,TargetBox,506,352,132,30);
-    control(L"BUTTON",L"Disabled",WS_TABSTOP,DisableTarget,650,352,90,30);
-    control(L"BUTTON",L"Add",WS_TABSTOP,AddMapping,750,352,104,30);
-    control(L"STATIC",L"Click a key, then press its replacement.",0,0,360,386,494,16);
-    control(L"STATIC",L"Multi-Key Combinations",0,0,360,428,270,20);
-    control(L"BUTTON",L"New",WS_TABSTOP,ComboNew,666,422,88,28);
-    control(L"BUTTON",L"Remove",WS_TABSTOP,ComboRemove,766,422,88,28);
-    comboList = control(L"LISTBOX",L"",LBS_NOTIFY | LBS_NOINTEGRALHEIGHT | WS_VSCROLL | WS_TABSTOP,ComboList,360,452,494,48);
-    comboButtons[0] = control(L"BUTTON",L"",WS_TABSTOP,ComboFirst,360,514,82,30);
-    comboButtons[1] = control(L"BUTTON",L"",WS_TABSTOP,ComboSecond,462,514,82,30);
-    comboButtons[2] = control(L"BUTTON",L"",WS_TABSTOP,ComboThird,564,514,82,30);
-    comboButtons[3] = control(L"BUTTON",L"",WS_TABSTOP,ComboTarget,672,514,74,30);
-    control(L"BUTTON",L"Add",WS_TABSTOP,ComboSave,758,514,96,30);
-    control(L"STATIC",L"Press 2–3 keys within 150 ms. Right-click the third key to clear it.",0,0,360,554,494,30);
-    statusLabel = control(L"STATIC",L"",0,0,58,626,590,22);
+    sourceBox = control(L"BUTTON",L"",WS_TABSTOP,SourceBox,360,408,132,30);
+    targetBox = control(L"BUTTON",L"",WS_TABSTOP,TargetBox,506,408,132,30);
+    control(L"BUTTON",L"Disabled",WS_TABSTOP,DisableTarget,650,408,90,30);
+    control(L"BUTTON",L"Add",WS_TABSTOP,AddMapping,750,408,104,30);
+    control(L"STATIC",L"Click a key, then press its replacement.",0,0,360,442,494,16);
+    control(L"STATIC",L"Multi-Key Combinations",0,0,360,484,270,20);
+    control(L"BUTTON",L"New",WS_TABSTOP,ComboNew,666,478,88,28);
+    control(L"BUTTON",L"Remove",WS_TABSTOP,ComboRemove,766,478,88,28);
+    comboList = control(L"LISTBOX",L"",LBS_NOTIFY | LBS_NOINTEGRALHEIGHT | WS_VSCROLL | WS_TABSTOP,ComboList,360,510,494,48);
+    comboButtons[0] = control(L"BUTTON",L"",WS_TABSTOP,ComboFirst,360,570,82,30);
+    comboButtons[1] = control(L"BUTTON",L"",WS_TABSTOP,ComboSecond,462,570,82,30);
+    comboButtons[2] = control(L"BUTTON",L"",WS_TABSTOP,ComboThird,564,570,82,30);
+    comboButtons[3] = control(L"BUTTON",L"",WS_TABSTOP,ComboTarget,672,570,74,30);
+    control(L"BUTTON",L"Add",WS_TABSTOP,ComboSave,758,570,96,30);
+    control(L"STATIC",L"Press 2–3 keys within 150 ms. Right-click the third key to clear it.",0,0,360,610,494,30);
+    statusLabel = control(L"STATIC",L"",0,0,58,692,590,22);
     SendMessageW(statusLabel,WM_SETFONT,WPARAM(font),TRUE);
-    toggleButton = control(L"BUTTON",L"",WS_TABSTOP,Toggle,676,620,178,32);
+    toggleButton = control(L"BUTTON",L"",WS_TABSTOP,Toggle,676,686,178,32);
     SendMessageW(profileBox,CB_SETITEMHEIGHT,WPARAM(-1),28);
     themeUI.apply(window,mappingList,themeUI.theme()); refresh();
 }
@@ -731,6 +731,11 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
     static const UINT taskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
     if (message == taskbarCreated) { magickey::setWindowIdentity(hwnd); return 0; }
     switch (message) {
+        case WM_APP+20: case WM_APP+21: {
+            int key = int(w);
+            if (message == WM_APP+21) { auto& mappings = settings.profiles[settings.selected].mappings; auto found = mappings.find(key); if (found != mappings.end()) key = found->second; }
+            auto text = keyName(key); wcsncpy_s(reinterpret_cast<wchar_t*>(l),512,text.c_str(),_TRUNCATE); return 0;
+        }
         case WM_CREATE: window = hwnd; makeInterface(); SetTimer(hwnd, NotificationTimer, 25, nullptr); return 0;
         case WM_ERASEBKGND: return 1;
         case WM_PAINT: {
@@ -777,15 +782,15 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
             if (id >= NumpadBase && id < NumpadBase + 6) {
                 cancelCapture();
                 HMENU menu = CreatePopupMenu();
-                AppendMenuW(menu, MF_STRING, 1, tr(L"Disabled"));
+                
                 AppendMenuW(menu, MF_STRING, 2, tr(L"Restore original key"));
                 POINT at; GetCursorPos(&at);
                 int choice = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON, at.x, at.y, 0, hwnd, nullptr);
                 DestroyMenu(menu);
                 if (choice) {
                     auto candidate = settings; int key = CustomNumpadKeys[id - NumpadBase];
-                    if (choice == 1) candidate.profiles[candidate.selected].mappings[key] = 0;
-                    else candidate.profiles[candidate.selected].mappings.erase(key);
+                    auto& mappings = candidate.profiles[candidate.selected].mappings;
+                    for (auto i = mappings.begin(); i != mappings.end();) { if (i->second == key) i = mappings.erase(i); else ++i; }
                     commit(std::move(candidate)); refresh();
                 }
                 return 0;
@@ -831,10 +836,12 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
                     comboCapture = -1; updateCaptureButtons(); return 0;
                 }
                 if (numpadEditing >= 0) {
-                    int from = CustomNumpadKeys[numpadEditing], to = LOWORD(l);
+                    int to = CustomNumpadKeys[numpadEditing], from = LOWORD(l);
                     numpadEditing = -1;
                     auto candidate = settings;
-                    if (from == to) candidate.profiles[candidate.selected].mappings.erase(from);
+                    auto& mappings = candidate.profiles[candidate.selected].mappings;
+                    for (auto i = mappings.begin(); i != mappings.end();) { if (i->second == to) i = mappings.erase(i); else ++i; }
+                    if (from == to) mappings.erase(from);
                     else candidate.profiles[candidate.selected].mappings[from] = to;
                     commit(std::move(candidate)); refresh(); return 0;
                 }
@@ -975,7 +982,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW); wc.hIcon = magickey::appIcon(false); wc.hIconSm = magickey::appIcon(true);
     wc.hbrBackground = nullptr;
     RegisterClassExW(&wc);
-    RECT bounds{0, 0, 900, 668};
+    RECT bounds{0, 0, 900, 734};
     DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN;
     AdjustWindowRect(&bounds, style, TRUE);
     window = CreateWindowExW(WS_EX_CONTROLPARENT, ClassName, L"MagicKey", style, CW_USEDEFAULT, CW_USEDEFAULT,

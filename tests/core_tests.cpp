@@ -69,7 +69,7 @@ int main() {
     require(toggleMessage(true, 3) == L"magicKey가 활성화되었습니다." && toggleMessage(false, 3) == L"magicKey가 비활성화되었습니다.");
     require(toggleMessage(true) == L"magicKey enabled." && toggleMessage(false) == L"magicKey disabled.");
     Settings settings;
-    require(settings.profiles[0].mappings == std::map<int, int>{{0x67, 'Q'}, {0x68, 'W'}, {0x65, 'R'}});
+    require(settings.profiles[0].mappings == std::map<int, int>{{'Q',0x67}, {'W',0x68}, {'R',0x64}, {'T',0x65}});
     require(settings.scanCodes && settings.language == 0);
     settings.blockWindows = true;
     settings.quickChat[0] = "你好，诸葛亮";
@@ -87,11 +87,11 @@ int main() {
     require(globalMigration.blockWindows && globalMigration.quickChat[0].empty());
     require(loaded.selected == 1 && loaded.profiles.size() == 2);
     require(loaded.profiles[1].name == settings.profiles[1].name);
-    require(loaded.profiles[1].blockWindows && loaded.profiles[0].mappings.at(0x68) == 'W');
+    require(loaded.profiles[1].blockWindows && loaded.profiles[0].mappings.at('W') == 0x68);
     require(loaded.language == 3 && !loaded.scanCodes);
     // New profiles get independent forward mappings, without changing the
     // existing Default profile or copying edits from the selected profile.
-    const std::map<int, int> newDefaults{{'Q', 0x67}, {'W', 0x68}, {'R', 0x65}};
+    const std::map<int, int> newDefaults{{'Q',0x67}, {'W',0x68}, {'R',0x64}, {'T',0x65}};
     Settings created;
     const auto existingMappings = created.profiles[0].mappings;
     created.profiles.push_back(newProfile("First game"));

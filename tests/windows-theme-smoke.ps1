@@ -98,7 +98,7 @@ try {
         $language = $case[1]
         $name = $case[2]
         $profile = Join-Path $root 'mywarkey.profiles'
-        [IO.File]::WriteAllText($profile, "MYWARKEY 2 0 1 $language 1 `"Game`" 0 5 103 81 104 87 101 82 65 90 83 88`n")
+        [IO.File]::WriteAllText($profile, "MYWARKEY 2 0 1 $language 1 `"Game`" 0 5 81 103 87 104 84 101 65 90 83 88`n")
         [IO.File]::WriteAllText((Join-Path $root 'MagicKey.theme'), 'MAGICKEY_THEME 1 0')
         $profileHash = (Get-FileHash -LiteralPath $profile -Algorithm SHA256).Hash
         $process = Start-MagicKey
@@ -254,7 +254,7 @@ try {
         $null = [ThemeWindow]::GetWindowText($pad,$caption.Clear(),256)
         if ($caption.ToString() -ceq 'T') { break }
     }
-    if ($caption.ToString() -cne 'T' -or ![IO.File]::ReadAllText($profile).Contains('103 84')) { throw 'Numpad destination capture did not save' }
+    if ($caption.ToString() -cne 'T' -or ![IO.File]::ReadAllText($profile).Contains('84 103')) { throw 'Numpad destination capture did not save' }
     if ([ThemeWindow]::SendMessage([ThemeWindow]::GetDlgItem($hwnd,106),0x1004,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -ne 0) { throw 'Captured numpad mapping appeared in general table' }
     # Create A+B -> D, then add the third key through capture and update it.
     $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]415,[IntPtr]::Zero)
