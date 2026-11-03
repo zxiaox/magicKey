@@ -12,20 +12,20 @@ int main() {
     require(engine.event('A',true,p,true,send,0));
     require(engine.event('B',true,p,true,send,20)); require(sent.empty());
     require(engine.event('C',true,p,true,send,40)); require(sent == Events{{'D',true}});
-    require(engine.event('B',false,p,true,send,50)); require(sent == Events{{'D',true},{'D',false}});
-    engine.event('A',false,p,true,send,60); engine.event('C',false,p,true,send,60);
+    require(engine.event('B',false,p,true,send,50)); engine.tick(90,p,true,send); require(sent == Events{{'D',true},{'D',false}});
+    engine.event('A',false,p,true,send,95); engine.event('C',false,p,true,send,95);
     sent.clear();
     engine.event('B',true,p,true,send,100); engine.event('A',true,p,true,send,110);
     engine.tick(250,p,true,send); require(sent == Events{{'C',true}});
-    engine.event('A',false,p,true,send,260); engine.event('B',false,p,true,send,260);
+    engine.event('A',false,p,true,send,260); engine.event('B',false,p,true,send,260); engine.tick(300,p,true,send);
     require(sent == Events{{'C',true},{'C',false}});
     // Incomplete taps retain normal behavior, including single-key mappings.
     sent.clear(); p.mappings['A'] = 'X';
     engine.event('A',true,p,true,send,300); require(sent.empty());
-    engine.event('A',false,p,true,send,310); require(sent == Events{{'X',true},{'X',false}});
+    engine.event('A',false,p,true,send,310); engine.tick(360,p,true,send); require(sent == Events{{'X',true},{'X',false}});
     sent.clear();
     engine.event('B',true,p,true,send,400); engine.tick(550,p,true,send);
-    engine.event('B',false,p,true,send,560); require(sent == Events{{'B',true},{'B',false}});
+    engine.event('B',false,p,true,send,560); engine.tick(600,p,true,send); require(sent == Events{{'B',true},{'B',false}});
     // Pause/profile changes discard unfinished chords, release targets once,
     // and consume physical releases without leaking original keys.
     sent.clear(); engine.event('A',true,p,true,send,600); engine.release(send);
@@ -44,6 +44,13 @@ int main() {
     std::stringstream file; writeSettings(file,settings); auto loaded = readSettings(file);
     require(loaded.profiles[0].combinations.size() == 2 && loaded.profiles[0].combinations[1].keys == std::vector<int>{'A','B','C'});
     require(loaded.quickChat == settings.quickChat && loaded.quickChatSlot == 3);
+    std::stringstream oldFile;
+    oldFile << "MYWARKEY 3 1 2 1 1 1 \"First\" 0 1 65 90 \"Second\" 0 0 QUICKCHAT 10 ";
+    for (int i = 0; i < 10; ++i) oldFile << std::quoted(i == 0 ? std::string("诸葛亮") : std::string{}) << ' ';
+    auto old = readSettings(oldFile);
+    require(old.selected == 1 && old.blockWindows && old.quickChat[0] == "诸葛亮" && old.profiles[0].combinations.empty());
+    std::stringstream migrated; writeSettings(migrated,old); auto again = readSettings(migrated);
+    require(again.quickChat == old.quickChat && again.profiles[0].mappings == old.profiles[0].mappings);
     for (auto keys : {std::vector<int>{'A'}, std::vector<int>{'A','A'}, std::vector<int>{'A','B','C','D'}}) {
         bool failed = false; try { combinationKeys(keys); } catch (...) { failed = true; } require(failed);
     }

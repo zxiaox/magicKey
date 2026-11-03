@@ -143,11 +143,24 @@ class Remapper {
     std::array<unsigned, 256> references{};
     std::vector<int> pending;
     std::vector<Combination> active;
-    std::uint64_t deadline = 0;
+    std::uint64_t deadline = 0, clockNow = 0;
+    std::array<std::uint64_t,256> minimumRelease{};
+    std::array<bool,256> delayedRelease{};
     bool contains(const std::vector<int>& keys, int key) const { return std::find(keys.begin(),keys.end(),key) != keys.end(); }
     bool allowed(const Combination& c, const Profile& p) const { return !p.blockWindows || (!contains(c.keys,0x5B) && !contains(c.keys,0x5C)); }
-    template<class Sink> void start(int target, Sink& send) { if (target && references[target]++ == 0) send(target,true); }
-    template<class Sink> void stop(int target, Sink& send) { if (target && references[target] && --references[target] == 0) send(target,false); }
+    template<class Sink> void start(int target, Sink& send, bool buffered = false) {
+        if (target && references[target]++ == 0) {
+            if (!delayedRelease[target]) send(target,true);
+            delayedRelease[target] = false;
+            minimumRelease[target] = buffered ? clockNow + 50 : 0;
+        }
+    }
+    template<class Sink> void stop(int target, Sink& send) {
+        if (target && references[target] && --references[target] == 0) {
+            if (clockNow < minimumRelease[target]) delayedRelease[target] = true;
+            else send(target,false);
+        }
+    }
     template<class Sink> bool normal(int source, bool down, const Profile& p, bool enabled, Sink& send, bool force = false) {
         auto found = held.find(source);
         if (!down) {
@@ -162,7 +175,7 @@ class Remapper {
         else if (mapping != p.mappings.end()) target = mapping->second;
         else if (force) target = source;
         else return false;
-        held[source] = target; start(target,send); return true;
+        held[source] = target; start(target,send,force); return true;
     }
     const Combination* complete(const Profile& p) const {
         const Combination* best = nullptr;
@@ -183,7 +196,7 @@ class Remapper {
     template<class Sink> void resolve(const Profile& p, Sink& send) {
         auto chosen = complete(p);
         if (chosen) {
-            active.push_back(*chosen); start(chosen->target,send);
+            active.push_back(*chosen); start(chosen->target,send,true);
             for (int key : chosen->keys) held[key] = 0;
             for (int key : pending) if (!contains(chosen->keys,key)) normal(key,true,p,true,send,true);
         } else for (int key : pending) normal(key,true,p,true,send,true);
@@ -192,6 +205,10 @@ class Remapper {
 public:
     static constexpr std::uint64_t CombinationWindowMs = 150;
     template<class Sink> void tick(std::uint64_t now, const Profile& p, bool enabled, Sink&& send) {
+        clockNow = now;
+        for (int key = 1; key < 256; ++key) if (delayedRelease[key] && !references[key] && now >= minimumRelease[key]) {
+            delayedRelease[key] = false; send(key,false);
+        }
         if (enabled && !pending.empty() && now >= deadline) resolve(p,send);
     }
     template<class Sink> bool event(int source, bool down, const Profile& p, bool enabled, Sink&& send, std::uint64_t now = 0) {
@@ -227,8 +244,8 @@ public:
         return normal(source,true,p,true,send);
     }
     template<class Sink> void release(Sink&& send) {
-        for (int key = 1; key < 256; ++key) if (references[key]) send(key,false);
-        references.fill(0);
+        for (int key = 1; key < 256; ++key) if (references[key] || delayedRelease[key]) send(key,false);
+        references.fill(0); delayedRelease.fill(false); minimumRelease.fill(0);
         for (auto& entry : held) entry.second = 0;
         for (int key : pending) held[key] = 0;
         pending.clear(); active.clear();
