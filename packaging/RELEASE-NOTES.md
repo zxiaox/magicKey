@@ -1,10 +1,7 @@
-# MagicKey v1.10.1
+# MagicKey v1.10.2
 
-- Reorganized mapping controls into two rows: keypad and ordinary mappings side by side, with full-width combinations below.
-- Editable fill-in fields replace the mapping lists and separate Add/Update editors. Left is Key to Send; right is Key to Press. Completed edits save immediately.
-- Add blank rows, remove rows with ×, and scroll to additional rows. Optional third combination keys remain blank when unconfigured.
-- Together and Sequence modes update directly on each combination row; legacy Input chord rules remain supported.
-- Automatically check for updates in the background at startup. Prompt before downloading an available release; stay quiet when current or offline.
-- Existing profiles, global Quick Chat, themes, languages, and settings format remain compatible.
+- Moved Quick Chat to the bottom status bar, immediately left of the remapping toggle.
+- Display Ctrl + Alt + F12 on a second line inside both the Pause remapping and Enable remapping button states.
+- Preserve existing mapping behavior, profiles, Quick Chat messages, themes, and languages.
 
-Download MagicKey.exe directly, or extract the portable ZIP into a writable folder. No Visual Studio or installation is needed. Replace the old executable while keeping mywarkey.profiles and MagicKey.theme beside it, or use Settings → Check for updates.
+Download MagicKey.exe or the portable ZIP. Existing users can use Settings → Check for updates.

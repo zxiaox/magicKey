@@ -413,7 +413,8 @@ void refresh() {
         if (combinationRows.empty()) combinationRows.push_back({});
     }
     renderRows(); updateCaptureButtons();
-    SetWindowTextW(toggleButton, tr(enabled ? L"Pause remapping" : L"Enable remapping"));
+    auto toggleText = std::wstring(tr(enabled ? L"Pause remapping" : L"Enable remapping")) + L"\nCtrl + Alt + F12";
+    SetWindowTextW(toggleButton, toggleText.c_str());
     SetWindowTextW(statusLabel, tr(enabled ? L"Remapping active" : L"Remapping paused"));
     EnableWindow(GetDlgItem(window, DeleteProfile), settings.profiles.size() > 1);
     InvalidateRect(window, nullptr, FALSE);
@@ -536,12 +537,11 @@ void makeInterface() {
     control(L"STATIC",L"Key to Press",0,0,410,506,130,20);
     control(L"STATIC",L"Mode",0,0,570,506,200,20);
     control(L"SCROLLBAR",L"",SBS_VERT,ComboScroll,854,532,16,88);
-    control(L"BUTTON",L"Quick Chat",WS_TABSTOP,QuickChatOpen,44,410,124,30);
-    control(L"STATIC",L"Alt + 1–0",0,0,180,416,124,20);
+    control(L"BUTTON",L"Quick Chat",WS_TABSTOP,QuickChatOpen,530,668,134,38);
     control(L"STATIC",L"Click to capture. Right-click to clear. Changes save automatically.",0,0,44,630,810,20);
     statusLabel = control(L"STATIC",L"",0,0,58,676,320,22);
     SendMessageW(statusLabel,WM_SETFONT,WPARAM(font),TRUE);
-    toggleButton = control(L"BUTTON",L"",WS_TABSTOP,Toggle,676,670,178,32);
+    toggleButton = control(L"BUTTON",L"",WS_TABSTOP,Toggle,676,668,178,38);
     SendMessageW(profileBox,CB_SETITEMHEIGHT,WPARAM(-1),28);
     themeUI.apply(window,nullptr,themeUI.theme()); refresh();
 }

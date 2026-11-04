@@ -130,9 +130,14 @@ try {
         $null = [ThemeWindow]::GetClientRect($hwnd,[ref]$client)
         if ($client.Bottom -lt 708) { throw 'Window work-area clipping hides the status bar' }
         $toggle = [ThemeWindow]::GetDlgItem($hwnd, 112)
+        $chatBounds = New-Object ThemeWindow+Rect
+        $pauseBounds = New-Object ThemeWindow+Rect
+        $null = [ThemeWindow]::GetWindowRect([ThemeWindow]::GetDlgItem($hwnd,121),[ref]$chatBounds)
+        $null = [ThemeWindow]::GetWindowRect($toggle,[ref]$pauseBounds)
+        if ($chatBounds.Top -ne $pauseBounds.Top -or $chatBounds.Right -gt $pauseBounds.Left) { throw 'Quick Chat is not beside Pause in the bottom bar' }
         $activeLabel = New-Object Text.StringBuilder 256
         $null = [ThemeWindow]::GetWindowText($toggle, $activeLabel, 256)
-        if ($language -eq 0 -and $activeLabel.ToString() -cne 'Pause remapping') { throw 'App did not start enabled' }
+        if ($language -eq 0 -and $activeLabel.ToString() -cne "Pause remapping`nCtrl + Alt + F12") { throw 'App did not start enabled' }
         $null = [ThemeWindow]::SendMessage($hwnd, 0x111, [IntPtr](2010 + $theme), [IntPtr]::Zero)
         Start-Sleep -Milliseconds 200
         if ([IO.File]::ReadAllText((Join-Path $root 'MagicKey.theme')).Trim() -cne "MAGICKEY_THEME 1 $theme") { throw 'Theme was not saved' }
@@ -218,7 +223,7 @@ try {
         if (!$contents.StartsWith("MYWARKEY 5 $index 11 0 1")) { throw "Profile slot $index did not persist" }
         $label = New-Object Text.StringBuilder 256
         $null = [ThemeWindow]::GetWindowText([ThemeWindow]::GetDlgItem($hwnd, 112), $label, 256)
-        if ($label.ToString() -cne 'Pause remapping') { throw 'Profile shortcut did not enable remapping' }
+        if ($label.ToString() -cne "Pause remapping`nCtrl + Alt + F12") { throw 'Profile shortcut did not enable remapping' }
     }
     $before = [IO.File]::ReadAllText($profile)
     $null = [ThemeWindow]::SendMessage($hwnd, 0x8005, [IntPtr]10, [IntPtr]::Zero)

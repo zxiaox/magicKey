@@ -155,7 +155,6 @@ void ThemeUI::paint(HDC dc, const RECT& bounds, bool enabled, int language, bool
     text(dc, L"MagicKey", {92,23,360,61}, headingFont, selected == ThemeId::Warcraft ? p.accent : p.text);
     const auto subtitle = std::wstring(L"v") + MAGICKEY_VERSION_W + L"  /  " + tr(L"Portable keyboard control");
     text(dc, subtitle.c_str(), {94,64,550,86}, smallFont, p.muted);
-    text(dc, L"Ctrl + Alt + F12", {414,676,658,698}, smallFont, p.muted, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
     roundBox(dc, {40,682,48,690}, enabled ? p.success : p.muted, enabled ? p.success : p.muted, 8);
 }
 LRESULT ThemeUI::button(NMCUSTOMDRAW* draw, ButtonRole role, bool listening, bool checked) const {
@@ -182,7 +181,16 @@ LRESULT ThemeUI::button(NMCUSTOMDRAW* draw, ButtonRole role, bool listening, boo
         auto edge = (primary || listening || hot) ? p.accent : p.border;
         auto ink = disabled ? p.muted : primary ? p.accentInk : role == ButtonRole::Danger ? p.muted : p.text;
         roundBox(draw->hdc, box, disabled ? p.control : surface, edge, selected == ThemeId::Warcraft ? 4 : 10);
+        if (auto secondLine = wcschr(label,L'\n')) {
+            *secondLine++ = L'\0';
+            RECT title = box, hint = box;
+            title.top += 2; title.bottom = box.top + 20;
+            hint.top = title.bottom; hint.bottom -= 1;
+            text(draw->hdc,label,title,strongFont,ink,DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+            text(draw->hdc,secondLine,hint,smallFont,ink,DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        } else {
         text(draw->hdc, label, box, strongFont, listening ? p.accent : ink, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
+        }
     }
     if ((draw->uItemState & CDIS_FOCUS) && !(SendMessageW(button, WM_QUERYUISTATE, 0, 0) & UISF_HIDEFOCUS)) {
         RECT focus = draw->rc; InflateRect(&focus, -4, -4); DrawFocusRect(draw->hdc, &focus);
