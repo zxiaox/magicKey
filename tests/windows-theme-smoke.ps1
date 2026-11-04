@@ -128,7 +128,7 @@ try {
         if ([ThemeWindow]::GetDlgItem($hwnd,10006) -ne [IntPtr]::Zero) { throw 'Keypad mappings leaked into ordinary rows' }
         $client = New-Object ThemeWindow+Rect
         $null = [ThemeWindow]::GetClientRect($hwnd,[ref]$client)
-        if ($client.Bottom -lt 688) { throw 'Window work-area clipping hides the status bar' }
+        if ($client.Bottom -lt 648) { throw 'Window work-area clipping hides the status bar' }
         $toggle = [ThemeWindow]::GetDlgItem($hwnd, 112)
         $chatBounds = New-Object ThemeWindow+Rect
         $pauseBounds = New-Object ThemeWindow+Rect
@@ -297,8 +297,13 @@ try {
     if ($caption.Length -ne 0) { throw 'Cleared third key shows placeholder text' }
     $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]416,[IntPtr]::Zero)
     if ([ThemeWindow]::GetDlgItem($hwnd,20006) -eq [IntPtr]::Zero) { throw 'Add combination row did not work' }
+    $compactBounds = New-Object ThemeWindow+Rect
+    $null = [ThemeWindow]::GetClientRect($hwnd,[ref]$compactBounds)
     # More than the visible four mapping rows must remain reachable by scrolling.
     foreach ($n in 1..5) { $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]120,[IntPtr]::Zero) }
+    $expandedBounds = New-Object ThemeWindow+Rect
+    $null = [ThemeWindow]::GetClientRect($hwnd,[ref]$expandedBounds)
+    if ($expandedBounds.Bottom -le $compactBounds.Bottom) { throw 'Mapping panels did not adapt to additional rows' }
     if ([ThemeWindow]::GetDlgItem($hwnd,10015) -eq [IntPtr]::Zero) { throw 'New row did not scroll into view' }
     $null = [ThemeWindow]::SendMessage($hwnd,0x115,[IntPtr]0,[ThemeWindow]::GetDlgItem($hwnd,500))
     if ([ThemeWindow]::GetDlgItem($hwnd,10003) -eq [IntPtr]::Zero) { throw 'Mapping scrollbar did not scroll back' }

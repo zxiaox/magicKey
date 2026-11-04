@@ -26,6 +26,8 @@ struct ComboRow { std::array<int,3> keys{}; int trigger = -1, original = -1; Com
 std::vector<MappingRow> mappingRows;
 std::vector<ComboRow> combinationRows;
 std::vector<HWND> rowControls;
+std::vector<std::pair<HWND,RECT>> lowerControls;
+int mappingBottom = 430;
 std::string rowsProfile;
 int mapOffset = 0, comboOffset = 0, rowCapture = -1;
 bool buildingRows = false;
@@ -433,6 +435,19 @@ std::string enteredName() {
 void renderRows() {
     int focusedId = GetDlgCtrlID(GetFocus());
     buildingRows = true;
+    const int visibleRows = std::clamp(int(mappingRows.size()),1,4);
+    const int bottom = std::max(390,278+visibleRows*40);
+    const int shift = bottom-430;
+    if (bottom != mappingBottom) {
+        mappingBottom = bottom; themeUI.setMappingBottom(bottom);
+        for (const auto& [item,rect] : lowerControls)
+            MoveWindow(item,rect.left,rect.top+shift,rect.right-rect.left,rect.bottom-rect.top,TRUE);
+        RECT bounds{0,0,900,694+shift};
+        AdjustWindowRect(&bounds,DWORD(GetWindowLongPtrW(window,GWL_STYLE)),TRUE);
+        SetWindowPos(window,nullptr,0,0,bounds.right-bounds.left,bounds.bottom-bounds.top,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);
+    }
+    MoveWindow(GetDlgItem(window,MapScroll),854,270,16,visibleRows*40-4,TRUE);
+    ShowWindow(GetDlgItem(window,MapScroll),mappingRows.size()>4 ? SW_SHOW : SW_HIDE);
     for (HWND item : rowControls) DestroyWindow(item);
     rowControls.clear();
     auto add = [](const wchar_t* type, const std::wstring& text, DWORD style, int id, int x, int y, int width, int height) {
@@ -455,10 +470,10 @@ void renderRows() {
         add(L"BUTTON",L"\x00d7",WS_TABSTOP,id+2,770,y,64,36);
     }
     for (int i = comboOffset; i < std::min(int(combinationRows.size()),comboOffset+2); ++i) {
-        const auto& r = combinationRows[i]; int y=512+(i-comboOffset)*44, id=ComboRowBase+i*6;
+        const auto& r = combinationRows[i]; int y=512+shift+(i-comboOffset)*44, id=ComboRowBase+i*6;
         for (int f=0; f<3; ++f) {
             add(L"BUTTON",r.keys[f] ? keyName(r.keys[f]) : L"",WS_TABSTOP,id+f,44+f*116,y,96,36);
-            if (f<2) add(L"STATIC",r.mode == CombinationMode::Sequence ? L"=" : L"+",0,0,140+f*116,y+6,20,26);
+            if (f<2) add(L"STATIC",L"+",0,0,140+f*116,y+6,20,26);
         }
         add(L"STATIC",L"=",0,0,380,y+6,28,26);
         add(L"BUTTON",r.trigger >= 0 ? keyName(r.trigger) : L"",WS_TABSTOP,id+3,410,y,134,36);
@@ -521,7 +536,7 @@ void makeInterface() {
     control(L"BUTTON",L"Delete",WS_TABSTOP,DeleteProfile,750,134,104,32);
     control(L"STATIC",L"Custom Numeric Keypad",0,0,44,208,256,20);
     for (int i = 0; i < 6; ++i) {
-        int x = 44 + (i % 2)*132, y = 242 + (i/2)*56;
+        int x = 44 + (i % 2)*132, y = 242 + (i/2)*48;
         auto digit = std::to_wstring(CustomNumpadKeys[i]-VK_NUMPAD0) + L" \x2192";
         control(L"STATIC",digit.c_str(),0,0,x,y+9,28,24); localizedControls.pop_back();
         numpadButtons[i] = control(L"BUTTON",L"",WS_TABSTOP,NumpadBase+i,x+32,y,92,40);
@@ -543,6 +558,10 @@ void makeInterface() {
     SendMessageW(statusLabel,WM_SETFONT,WPARAM(font),TRUE);
     toggleButton = control(L"BUTTON",L"",WS_TABSTOP,Toggle,676,648,178,38);
     SendMessageW(profileBox,CB_SETITEMHEIGHT,WPARAM(-1),28);
+    for (HWND item=GetWindow(window,GW_CHILD); item; item=GetWindow(item,GW_HWNDNEXT)) {
+        RECT rect; GetWindowRect(item,&rect); MapWindowPoints(nullptr,window,reinterpret_cast<POINT*>(&rect),2);
+        if (rect.top >= 442) lowerControls.push_back({item,rect});
+    }
     themeUI.apply(window,nullptr,themeUI.theme()); refresh();
 }
 

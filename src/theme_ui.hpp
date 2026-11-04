@@ -11,12 +11,14 @@ class ThemeUI {
     ULONG_PTR graphicsToken = 0;
     IStream* artworkStream = nullptr;
     Gdiplus::Image* artwork = nullptr;
+    int mappingBottom = 430;
     ThemeId selected = ThemeId::Ivory;
     HBRUSH backgroundBrush = nullptr, panelBrush = nullptr, inputBrush = nullptr;
     HFONT bodyFont = nullptr, smallFont = nullptr, strongFont = nullptr, headingFont = nullptr;
 public:
     ~ThemeUI();
     void initialize(ThemeId theme);
+    void setMappingBottom(int bottom) { mappingBottom = bottom; }
     void apply(HWND root, HWND list, ThemeId theme);
     ThemeId theme() const { return selected; }
     const Palette& colors() const { return palette(selected); }

@@ -141,7 +141,8 @@ void ThemeUI::paint(HDC dc, const RECT& bounds, bool enabled, int language, bool
         }
         line(dc, 24, 103, 876, 103, p.border);
     }
-    for (RECT card : {RECT{24,96,876,176}, RECT{24,188,320,430}, RECT{338,188,876,430}, RECT{24,442,876,634}, RECT{24,646,876,688}}) {
+    const int shift = mappingBottom - 430;
+    for (RECT card : {RECT{24,96,876,176}, RECT{24,188,320,mappingBottom}, RECT{338,188,876,mappingBottom}, RECT{24,442+shift,876,634+shift}, RECT{24,646+shift,876,688+shift}}) {
         roundBox(dc, card, p.panel, p.border, selected == ThemeId::Warcraft ? 3 : 16);
         if (selected == ThemeId::Warcraft) {
             for (int x : {card.left + 6, card.right - 6}) for (int y : {card.top + 6, card.bottom - 6}) {
@@ -155,7 +156,7 @@ void ThemeUI::paint(HDC dc, const RECT& bounds, bool enabled, int language, bool
     text(dc, L"MagicKey", {92,23,360,61}, headingFont, selected == ThemeId::Warcraft ? p.accent : p.text);
     const auto subtitle = std::wstring(L"v") + MAGICKEY_VERSION_W + L"  /  " + tr(L"Portable keyboard control");
     text(dc, subtitle.c_str(), {94,64,550,86}, smallFont, p.muted);
-    roundBox(dc, {40,662,48,670}, enabled ? p.success : p.muted, enabled ? p.success : p.muted, 8);
+    roundBox(dc, {40,662+shift,48,670+shift}, enabled ? p.success : p.muted, enabled ? p.success : p.muted, 8);
 }
 LRESULT ThemeUI::button(NMCUSTOMDRAW* draw, ButtonRole role, bool listening, bool checked) const {
     if (draw->dwDrawStage != CDDS_PREPAINT) return CDRF_DODEFAULT;

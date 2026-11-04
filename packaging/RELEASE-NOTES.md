@@ -1,7 +1,6 @@
-# MagicKey v1.10.3
+# MagicKey v1.10.4
 
-- Slightly reduced the height of the numeric keypad and standard mapping panels, while retaining four visible mapping rows.
-- Renamed mapping and combination labels to Original Key and New Key, with equals signs replacing arrows. Mapping behavior is unchanged.
-- Renamed Quick Chat to Quick Chat Settings in the bottom bar, Settings menu, and editor title.
+- Compact the upper mapping panels to fit their contents. Additional key mapping rows expand the panels up to four visible rows; further rows scroll. The combination area and bottom bar move with the panel height.
+- Use + between combination keys in every mode, with = before the final key: A+B+C=D. Together and Sequence behavior is unchanged.
 
 Download MagicKey.exe or the portable ZIP, or use Settings → Check for updates. Existing profiles and messages are preserved.
