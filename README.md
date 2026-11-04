@@ -162,7 +162,7 @@ Notification speed: Enter remains held for 80 ms; chat-open and text-settle wait
 
 ## Mapping layout and automatic saving (v1.10)
 
-Below the profiles, the first mapping row has **Custom Numeric Keypad** on the left and **Key Mapping** on the right. **Multi-Key Combinations** spans the full width beneath them. The standard area shows four editable rows and the combination area shows three; scrollbars reveal additional rows. Native list headers and row tooltips are no longer used.
+Below the profiles, the first mapping row has **Custom Numeric Keypad** on the left and **Key Mapping** on the right. **Multi-Key Combinations** spans the full width beneath them. The standard area shows four editable rows and the combination area shows two; scrollbars reveal additional rows. Native list headers and row tooltips are no longer used.
 
 All fields capture physical keys, distinguishing top-row digits from the numeric keypad. A blank field means unconfigured, with no placeholder. Keypad slots 7/8/4/5 default to input Q/W/R/T respectively; slots 1/2 remain blank. The obsolete three-mapping default is not added separately.
 

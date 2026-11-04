@@ -445,16 +445,16 @@ void renderRows() {
         EnableWindow(GetDlgItem(window,id),count > page);
     };
     scroll(MapScroll,mapOffset,int(mappingRows.size()),4);
-    scroll(ComboScroll,comboOffset,int(combinationRows.size()),3);
+    scroll(ComboScroll,comboOffset,int(combinationRows.size()),2);
     for (int i = mapOffset; i < std::min(int(mappingRows.size()),mapOffset+4); ++i) {
-        const auto& r = mappingRows[i]; int y=292+(i-mapOffset)*44, id=MapRowBase+i*3;
+        const auto& r = mappingRows[i]; int y=270+(i-mapOffset)*44, id=MapRowBase+i*3;
         add(L"BUTTON",r.sent < 0 ? L"" : keyName(r.sent),WS_TABSTOP,id,360,y,180,36);
         add(L"STATIC",L"\x2190",0,0,542,y+6,24,26);
         add(L"BUTTON",r.pressed ? keyName(r.pressed) : L"",WS_TABSTOP,id+1,568,y,180,36);
         add(L"BUTTON",L"\x00d7",WS_TABSTOP,id+2,770,y,64,36);
     }
-    for (int i = comboOffset; i < std::min(int(combinationRows.size()),comboOffset+3); ++i) {
-        const auto& r = combinationRows[i]; int y=560+(i-comboOffset)*44, id=ComboRowBase+i*6;
+    for (int i = comboOffset; i < std::min(int(combinationRows.size()),comboOffset+2); ++i) {
+        const auto& r = combinationRows[i]; int y=532+(i-comboOffset)*44, id=ComboRowBase+i*6;
         for (int f=0; f<3; ++f) {
             add(L"BUTTON",r.keys[f] ? keyName(r.keys[f]) : L"",WS_TABSTOP,id+f,44+f*116,y,96,36);
             if (f<2) add(L"STATIC",r.mode == CombinationMode::Sequence ? L"\x2192" : L"+",0,0,140+f*116,y+6,20,26);
@@ -510,38 +510,38 @@ bool saveRow(int id) {
     return true;
 }
 void makeInterface() {
-    control(L"STATIC",L"Configuration Schemes",0,SectionProfile,44,130,230,20);
-    profileBox = control(WC_COMBOBOXW,L"",CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP,ProfileBox,44,156,230,300);
-    control(L"STATIC",L"Profile name",0,0,286,130,240,20);
-    nameEdit = control(L"EDIT",L"",WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP,ProfileName,286,156,240,32);
+    control(L"STATIC",L"Configuration Schemes",0,SectionProfile,44,108,230,20);
+    profileBox = control(WC_COMBOBOXW,L"",CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP,ProfileBox,44,134,230,300);
+    control(L"STATIC",L"Profile name",0,0,286,108,240,20);
+    nameEdit = control(L"EDIT",L"",WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP,ProfileName,286,134,240,32);
     SendMessageW(nameEdit,EM_SETLIMITTEXT,80,0);
-    control(L"BUTTON",L"New",WS_TABSTOP,NewProfile,540,156,86,32);
-    control(L"BUTTON",L"Rename",WS_TABSTOP,RenameProfile,636,156,104,32);
-    control(L"BUTTON",L"Delete",WS_TABSTOP,DeleteProfile,750,156,104,32);
-    control(L"STATIC",L"Custom Numeric Keypad",0,0,44,230,256,20);
+    control(L"BUTTON",L"New",WS_TABSTOP,NewProfile,540,134,86,32);
+    control(L"BUTTON",L"Rename",WS_TABSTOP,RenameProfile,636,134,104,32);
+    control(L"BUTTON",L"Delete",WS_TABSTOP,DeleteProfile,750,134,104,32);
+    control(L"STATIC",L"Custom Numeric Keypad",0,0,44,208,256,20);
     for (int i = 0; i < 6; ++i) {
-        int x = 44 + (i % 2)*132, y = 264 + (i/2)*56;
+        int x = 44 + (i % 2)*132, y = 242 + (i/2)*56;
         auto digit = std::to_wstring(CustomNumpadKeys[i]-VK_NUMPAD0) + L" \x2192";
         control(L"STATIC",digit.c_str(),0,0,x,y+9,28,24); localizedControls.pop_back();
         numpadButtons[i] = control(L"BUTTON",L"",WS_TABSTOP,NumpadBase+i,x+32,y,92,40);
     }
-    control(L"STATIC",L"Key Mapping",0,SectionMappings,360,228,270,22);
-    control(L"BUTTON",L"Add row",WS_TABSTOP,NewMapping,740,222,114,30);
-    control(L"STATIC",L"Key to Send",0,0,360,264,190,22);
-    control(L"STATIC",L"Key to Press",0,0,568,264,190,22);
-    control(L"SCROLLBAR",L"",SBS_VERT,MapScroll,854,292,16,176);
-    control(L"STATIC",L"Multi-Key Combinations",0,0,44,498,390,22);
-    control(L"BUTTON",L"Add row",WS_TABSTOP,416,740,492,114,30);
-    control(L"STATIC",L"Keys to Send",0,0,44,532,330,20);
-    control(L"STATIC",L"Key to Press",0,0,410,532,130,20);
-    control(L"STATIC",L"Mode",0,0,570,532,200,20);
-    control(L"SCROLLBAR",L"",SBS_VERT,ComboScroll,854,560,16,132);
-    control(L"BUTTON",L"Quick Chat",WS_TABSTOP,QuickChatOpen,44,438,124,30);
-    control(L"STATIC",L"Alt + 1–0",0,0,180,444,124,20);
-    control(L"STATIC",L"Click to capture. Right-click to clear. Changes save automatically.",0,0,44,706,810,20);
-    statusLabel = control(L"STATIC",L"",0,0,58,752,590,22);
+    control(L"STATIC",L"Key Mapping",0,SectionMappings,360,206,270,22);
+    control(L"BUTTON",L"Add row",WS_TABSTOP,NewMapping,740,200,114,30);
+    control(L"STATIC",L"Key to Send",0,0,360,242,190,22);
+    control(L"STATIC",L"Key to Press",0,0,568,242,190,22);
+    control(L"SCROLLBAR",L"",SBS_VERT,MapScroll,854,270,16,176);
+    control(L"STATIC",L"Multi-Key Combinations",0,0,44,474,390,22);
+    control(L"BUTTON",L"Add row",WS_TABSTOP,416,740,466,114,30);
+    control(L"STATIC",L"Keys to Send",0,0,44,506,330,20);
+    control(L"STATIC",L"Key to Press",0,0,410,506,130,20);
+    control(L"STATIC",L"Mode",0,0,570,506,200,20);
+    control(L"SCROLLBAR",L"",SBS_VERT,ComboScroll,854,532,16,88);
+    control(L"BUTTON",L"Quick Chat",WS_TABSTOP,QuickChatOpen,44,410,124,30);
+    control(L"STATIC",L"Alt + 1–0",0,0,180,416,124,20);
+    control(L"STATIC",L"Click to capture. Right-click to clear. Changes save automatically.",0,0,44,630,810,20);
+    statusLabel = control(L"STATIC",L"",0,0,58,676,590,22);
     SendMessageW(statusLabel,WM_SETFONT,WPARAM(font),TRUE);
-    toggleButton = control(L"BUTTON",L"",WS_TABSTOP,Toggle,676,746,178,32);
+    toggleButton = control(L"BUTTON",L"",WS_TABSTOP,Toggle,676,670,178,32);
     SendMessageW(profileBox,CB_SETITEMHEIGHT,WPARAM(-1),28);
     themeUI.apply(window,nullptr,themeUI.theme()); refresh();
 }
@@ -685,7 +685,7 @@ void command(int id, int notification) {
     if (id >= ThemeMenu && id < ThemeMenu + 4) { changeTheme(id-ThemeMenu); renderRows(); return; }
     if (id == NewMapping || id == 416) {
         if (id == NewMapping) { if (mappingRows.size() >= 254) return; mappingRows.push_back({}); mapOffset = std::max(0,int(mappingRows.size())-4); }
-        else { if (combinationRows.size() >= 100) return; combinationRows.push_back({}); comboOffset = std::max(0,int(combinationRows.size())-3); }
+        else { if (combinationRows.size() >= 100) return; combinationRows.push_back({}); comboOffset = std::max(0,int(combinationRows.size())-2); }
         renderRows(); return;
     }
     if (id == QuickChatOpen) { openQuickChat(); return; }
@@ -815,7 +815,7 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
             int id = GetDlgCtrlID(reinterpret_cast<HWND>(l));
             if (id != MapScroll && id != ComboScroll) break;
             cancelCapture(); int& offset = id == MapScroll ? mapOffset : comboOffset;
-            int page = id == MapScroll ? 4 : 3;
+            int page = id == MapScroll ? 4 : 2;
             switch (LOWORD(w)) {
                 case SB_LINEUP: --offset; break; case SB_LINEDOWN: ++offset; break;
                 case SB_PAGEUP: offset -= page; break; case SB_PAGEDOWN: offset += page; break;
@@ -977,7 +977,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW); wc.hIcon = magickey::appIcon(false); wc.hIconSm = magickey::appIcon(true);
     wc.hbrBackground = nullptr;
     RegisterClassExW(&wc);
-    RECT bounds{0, 0, 900, 794};
+    RECT bounds{0, 0, 900, 714};
     DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN;
     AdjustWindowRect(&bounds, style, TRUE);
     window = CreateWindowExW(WS_EX_CONTROLPARENT, ClassName, L"MagicKey", style, CW_USEDEFAULT, CW_USEDEFAULT,

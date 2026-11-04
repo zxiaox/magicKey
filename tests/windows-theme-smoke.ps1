@@ -45,6 +45,7 @@ public static class ThemeWindow {
     }
     [StructLayout(LayoutKind.Sequential)] public struct Rect { public int Left, Top, Right, Bottom; }
     [StructLayout(LayoutKind.Sequential)] public struct Point { public int X, Y; }
+    [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr h, out Rect r);
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out Rect r);
     [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr h, ref Point p);
     [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr h, IntPtr dc, uint flags);
@@ -125,6 +126,9 @@ try {
             if ([ThemeWindow]::GetDlgItem($hwnd,$id) -eq [IntPtr]::Zero) { throw "Inline mapping field $id missing" }
         }
         if ([ThemeWindow]::GetDlgItem($hwnd,10006) -ne [IntPtr]::Zero) { throw 'Keypad mappings leaked into ordinary rows' }
+        $client = New-Object ThemeWindow+Rect
+        $null = [ThemeWindow]::GetClientRect($hwnd,[ref]$client)
+        if ($client.Bottom -lt 708) { throw 'Window work-area clipping hides the status bar' }
         $toggle = [ThemeWindow]::GetDlgItem($hwnd, 112)
         $activeLabel = New-Object Text.StringBuilder 256
         $null = [ThemeWindow]::GetWindowText($toggle, $activeLabel, 256)
