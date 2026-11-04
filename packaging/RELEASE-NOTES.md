@@ -1,4 +1,4 @@
-# MagicKey v1.10.0
+# MagicKey v1.10.1
 
 - Reorganized mapping controls into two rows: keypad and ordinary mappings side by side, with full-width combinations below.
 - Editable fill-in fields replace the mapping lists and separate Add/Update editors. Left is Key to Send; right is Key to Press. Completed edits save immediately.

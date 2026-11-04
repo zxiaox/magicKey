@@ -8,6 +8,9 @@ using namespace mywarkey;
 bool chat = false, packet = false, enterTimingValid = true;
 ULONGLONG enterDown = 0;
 int escapes = 0, asciiPackets = 0, pastes = 0;
+bool replaceClipboardOnPaste = false, copiedOnPaste = false;
+HWND copyAfterPaste = nullptr;
+void clipboardText(HWND window, const std::wstring& text, bool custom);
 std::wstring draft;
 std::vector<std::wstring> submitted;
 LRESULT CALLBACK receiver(HWND window, UINT message, WPARAM w, LPARAM l) {
@@ -31,6 +34,7 @@ LRESULT CALLBACK receiver(HWND window, UINT message, WPARAM w, LPARAM l) {
                 }
                 CloseClipboard();
             }
+            if (replaceClipboardOnPaste) { replaceClipboardOnPaste=false; copyAfterPaste=window; }
             return 0;
         }
         if (w == VK_RETURN) enterDown = GetTickCount64();
@@ -55,6 +59,13 @@ void pump(GameNotifications& notifications, int milliseconds) {
     do {
         MSG message;
         while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) { TranslateMessage(&message); DispatchMessageW(&message); }
+        // Mutate only after the receiver has handled Ctrl+V, before advancing
+        // the sender toward closing Enter. A fixed sleep can land before paste
+        // preparation or after submission on a busy Windows runner.
+        if (copyAfterPaste) {
+            HWND owner=copyAfterPaste; copyAfterPaste=nullptr;
+            clipboardText(owner,L"new user copy",false); copiedOnPaste=true;
+        }
         notifications.tick();
         Sleep(5);
     } while (GetTickCount64() < until);
@@ -164,8 +175,10 @@ int main() {
         // A user copy made during the paste must win over the saved snapshot.
         auto beforeUserCopy = submitted.size();
         notifications.queue(game, configurationMessage(L"新方案", 1));
-        pump(notifications, 160); clipboardText(game, L"new user copy", false);
-        pump(notifications, 600); checkClipboard(game, L"new user copy", false);
+        replaceClipboardOnPaste=true; copiedOnPaste=false;
+        pump(notifications, 900);
+        require(copiedOnPaste, "Clipboard replacement did not observe a paste");
+        checkClipboard(game, L"new user copy", false);
         require(submitted.size() == beforeUserCopy, "Submitted after clipboard contents changed");
         require(notifications.diagnostics().find(L"clipboard changed") != std::wstring::npos, "Missing changed-clipboard diagnostic");
         std::size_t countBeforeFocusLoss = submitted.size();
