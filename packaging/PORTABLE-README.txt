@@ -1,87 +1,66 @@
-MagicKey - portable keyboard remapper for Windows 10/11 x64
+MagicKey v1.10.0 - portable keyboard remapper for Windows 10/11 x64
 https://github.com/zxiaox/magicKey
 
 Run MagicKey.exe from a writable folder. No installation, Visual Studio, CMake,
 Python, .NET, or additional C++ runtime installation is needed.
 
-Default mappings: Numpad 7 -> Q, Numpad 8 -> W, Numpad 5 -> R.
-Profiles created with New start with Q -> Numpad 7, W -> Numpad 8,
-and R -> Numpad 5. Existing profiles keep their saved mappings.
-Top-row numbers are unchanged. The app starts enabled with the selected profile.
-Click a From/To key button, press and release a key, then click Add or Update.
-Switch to your game. Ctrl + Alt + F12 toggles remapping on/off.
-Close the app to stop remapping. The interface is available in four languages.
-Choose Settings > Theme in the top menu: Ivory, Midnight, Arcane, or Warcraft III.
-Your theme is saved in MagicKey.theme separately from saved profiles.
+The app starts enabled. Ctrl + Alt + F12 toggles remapping; closing the app stops it.
+Choose Settings > Language or Theme for four languages and four built-in themes.
 
-Check for updates contacts this repository's public GitHub Releases. You can
-approve a verified download and restart. The previous executable is kept as
-MagicKey.exe.backup. Saved profiles and language preferences are preserved in
-mywarkey.profiles beside the executable (the legacy filename is intentional).
-No automatic checks run at startup. A GitHub account is not needed for downloads.
+MAPPING FIELDS
+Profiles span the top. Keypad and standard mappings sit side by side;
+combinations span the row below. Status stays at the bottom.
+The keypad fields select the input which sends each numpad destination.
+New profiles: Q -> Numpad 7, W -> Numpad 8, R -> Numpad 4, T -> Numpad 5.
+Slots 1 and 2 are blank. Top-row digits and numpad digits are distinct.
 
-简体中文：将程序放在可写入的文件夹中，双击 MagicKey.exe 即可运行，无需安装开发工具。
-默认映射：小键盘 7 -> Q、小键盘 8 -> W、小键盘 5 -> R。Ctrl + Alt + F12 切换启用/暂停。
-右上角可切换界面语言。“检查更新”可下载并安装新版本，保留已保存的配置。
+Standard mappings: left = Key to Send; right = Key to Press.
+Click a field, then press and release a physical key. Completed edits save
+immediately. Add row creates a blank draft; x removes a row. Right-click an
+output to clear it or choose Disabled. Right-click a trigger to clear it.
+Incomplete drafts are not saved and are discarded on profile switch or exit.
 
-日本語：書き込み可能なフォルダーで MagicKey.exe を実行してください。開発ツールは不要です。
-初期設定：テンキー 7 -> Q、テンキー 8 -> W、テンキー 5 -> R。Ctrl + Alt + F12 で有効/停止を切り替えます。
-右上で言語を変更できます。更新時も保存済みのプロファイルは保持されます。
+Combinations: enter two or three output keys on the left and a trigger on the
+right. Together sends the outputs simultaneously; Sequence sends them in order.
+The optional third field stays blank when unused. Every complete edit, including
+mode changes, saves immediately. Right-click any key field to clear it.
+Legacy Input chord rules retain the opposite direction: left-hand keys trigger
+the right-hand output when pressed within 150 ms.
+One output macro runs at a time; repeats do not restart it. Pause/profile/focus
+changes cancel generated input. Generated keys bypass remapping.
 
-한국어: 쓰기 가능한 폴더에서 MagicKey.exe를 실행하세요. 개발 도구 설치는 필요 없습니다.
-기본 매핑: 숫자 패드 7 -> Q, 8 -> W, 5 -> R. Ctrl + Alt + F12로 활성/정지를 전환합니다.
-오른쪽 위에서 언어를 변경할 수 있습니다. 업데이트 시 저장된 프로필은 유지됩니다.
+UPDATES AND SAVED SETTINGS
+MagicKey checks this repository's public GitHub Releases at startup. Automatic
+checks stay quiet when current or offline, and prompt before downloading a newer
+version. Settings > Check for updates runs an explicit check and shows its result.
+A GitHub account is not required. Verified updates preserve profiles and settings.
+The previous executable is kept as MagicKey.exe.backup.
 
-Warcraft III: leave Game-compatible input (scan codes) enabled. Confirm that real
-Q/W/R trigger the abilities first. If the game runs as administrator, MagicKey
-may need the same privilege level. Compatibility depends on the game/client.
+Profiles and language use mywarkey.profiles beside the executable (the legacy
+filename is intentional). Appearance is saved separately in MagicKey.theme.
+Existing settings versions 1-4 load; saving writes version 5. Keep a backup if
+downgrading, since older executables cannot read the current format.
+Disable Windows keys is global under Settings.
 
-Third-party software notices are included in THIRD-PARTY-NOTICES.txt.
+PROFILE SHORTCUTS AND QUICK CHAT
+Ctrl + left Alt + top-row 1..9, then 0 selects/enables profiles 1..10.
+Alt + top-row 1..9, then 0 sends global Quick Chat messages only in foreground
+Warcraft, including when remapping is paused. Quick Chat is independent of the
+selected profile. The editor autosaves and also provides Save and Clear buttons.
 
-Language is available under Settings > Language. Ctrl + Alt + F12 toggles
-remapping on/off at any time. The Warcraft artwork and app icon are built into the EXE.
-
-PROFILE SHORTCUTS AND GAME CHAT
-Ctrl + Alt + top-row 1..9, then 0 selects/enables profiles 1..10.
-Their shortcuts appear in the profile list. Numpad digits are unchanged.
-When Warcraft III is foreground, these shortcuts send:
-Configuration [actual profile name] enabled.
+WARCRAFT CHAT
+Profile switches send Configuration [actual profile name] enabled.
 Ctrl + Alt + F12 sends magicKey enabled. / magicKey disabled.
-These are normal chat messages visible to the current/default audience.
-Wait for all keys to be released. Sending follows Enter -> message -> Enter, with timed Enter presses.
-Use during gameplay with chat closed; an open draft may otherwise be submitted.
-All messages paste complete text using Ctrl+V. Classic Warcraft receives
-UTF-8 in CF_TEXT; modern Warcraft receives Unicode clipboard text. Previous
-clipboard formats are preserved where safe, and newer user copies are kept. Messages follow the software language. Clipboard history tools
-may observe temporary notification text.
-If no message appears, open Settings > Notification diagnostics after trying.
-Background games and other apps never receive these messages. Actual game
-compatibility depends on your Warcraft version, settings and privileges.
+Messages follow the app language. These are regular game chat messages visible
+to the current/default audience. Use during gameplay with chat closed: an open
+draft may otherwise be submitted. Messages use Enter -> paste -> Enter with timed
+key presses. Classic Warcraft receives UTF-8 narrow clipboard text; modern
+Warcraft receives Unicode. Previous clipboard formats are preserved where safe,
+and newer user copies are kept. Clipboard history tools may observe the text.
+Background games and other apps never receive these messages. If no message
+appears, open Settings > Notification diagnostics. Actual compatibility depends
+on Warcraft version, settings and privileges.
 
-VERSION 1.7 CHANGES
-Profile shortcuts: Ctrl + Alt + top-row 1..9, then 0 (use left Alt).
-Quick Chat: Alt + top-row 1..9, then 0. Open Quick Chat, choose a slot,
-type a message and click Save. Clear removes the assignment. Messages send
-only to foreground Warcraft, even when remapping is paused.
-Custom Numeric Keypad edits numpad 7/8, 4/5, 1/2 per profile. Click a field
-and press the replacement; right-click to disable or restore. General mappings
-have separate Add/Update actions and a New mapping button.
-Disable Windows keys is global under Settings. The selected legacy profile's
-preference migrates to the global setting. Saving upgrades profiles to version 3.
-
-VERSION 1.8
-Profiles span the top. Numeric keypad is on the left; Key Mapping and
-Multi-Key Combinations are stacked on the right. Status stays at the bottom.
-Combinations use two or three distinct keys pressed within 150 ms. Right-click
-the third input to clear it. Built-in shortcuts take priority; incomplete
-combinations keep their normal key behavior. Game-compatible input is in Settings.
-Quick Chat is global across profiles, autosaves, remembers the selected slot,
-and shows Saving/Saved/Not saved. Save writes immediately. Switching profiles
-preserves an open draft. Saving upgrades data to version 4 (reads versions 1-3).
-
-VERSION 1.9 OUTPUT MODES
-Together: right-hand trigger D sends left-hand A+B+C together.
-Sequence: D taps A, then B, then C in the entered order.
-Existing Input chord rules retain A+B+C -> D. New rules default to Together.
-One macro runs at a time; repeats do not restart it. Pause/profile/focus changes
-cancel generated input. Saving upgrades settings to version 5 (reads versions 1-4).
+Leave Game-compatible input (scan codes) enabled. If the game runs as
+administrator, MagicKey may need the same privilege level.
+Third-party notices and Warcraft artwork attribution are in THIRD-PARTY-NOTICES.txt.

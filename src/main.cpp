@@ -467,7 +467,7 @@ void renderRows() {
         add(L"BUTTON",L"\x00d7",WS_TABSTOP,id+5,770,y,64,36);
     }
     buildingRows = false;
-    if (focusedId >= MapRowBase) { HWND next=GetDlgItem(window,focusedId); if (next) SetFocus(next); }
+    if (focusedId >= MapRowBase && GetForegroundWindow() == window) { HWND next=GetDlgItem(window,focusedId); if (next) SetFocus(next); }
     InvalidateRect(window,nullptr,FALSE);
 }
 bool saveRow(int id) {
@@ -539,7 +539,7 @@ void makeInterface() {
     control(L"BUTTON",L"Quick Chat",WS_TABSTOP,QuickChatOpen,44,410,124,30);
     control(L"STATIC",L"Alt + 1–0",0,0,180,416,124,20);
     control(L"STATIC",L"Click to capture. Right-click to clear. Changes save automatically.",0,0,44,630,810,20);
-    statusLabel = control(L"STATIC",L"",0,0,58,676,590,22);
+    statusLabel = control(L"STATIC",L"",0,0,58,676,320,22);
     SendMessageW(statusLabel,WM_SETFONT,WPARAM(font),TRUE);
     toggleButton = control(L"BUTTON",L"",WS_TABSTOP,Toggle,676,670,178,32);
     SendMessageW(profileBox,CB_SETITEMHEIGHT,WPARAM(-1),28);
@@ -851,6 +851,7 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
             if (LOWORD(w) != WA_INACTIVE) { std::lock_guard<std::mutex> lock(engineMutex); engine.release(sendKey); }
             return 0;
         case ToggleMessage:
+            cancelCapture();
             // Serialize toggles and profile changes on the UI thread so rapid
             // alternating shortcuts preserve event order and final state.
             enabled = !enabled;
@@ -866,6 +867,7 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
             }
             return 0;
         case ProfileSwitch: {
+            cancelCapture();
             if (w >= settings.profiles.size() || w >= 10) return 0;
             auto candidate = settings; candidate.selected = std::size_t(w);
             if (commit(std::move(candidate))) {

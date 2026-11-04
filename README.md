@@ -6,12 +6,11 @@ A portable, native Windows keyboard remapper. No installer, Python, .NET, servic
 
 - Remap individual keys, including letters, function keys, modifiers, arrows, and the numeric keypad.
 - Set source and destination by clicking their key buttons and pressing the actual keys, with explicit top-row/numpad labels and no key-selection menus.
-- The initial Default profile contains **Numpad 7 → Q**, **Numpad 8 → W**, and **Numpad 5 → R**. Top-row number keys are unchanged.
 - Each new profile uses Q/W/R/T → Numpad 7/8/4/5 in its dedicated keypad area. Saved profiles retain their mappings.
 - Switch the interface instantly between **English**, **简体中文**, **日本語**, and **한국어**. The language is saved automatically; profile names stay as entered.
 - **Game-compatible input (scan codes)** is on by default, with an option to return to virtual-key output for typing applications.
 - Save up to 100 named profiles and switch between them in the profile menu.
-- Create, rename, and delete profiles; add, update, and remove mappings.
+- Create, rename, and delete profiles; edit mappings directly in autosaving rows.
 - Disable individual keys by selecting **Disabled** as their destination.
 - Disable both Windows keys globally through Settings. This takes priority over mappings from those keys.
 - Start enabled with the selected profile; pause or resume using the main button. **Ctrl + Alt + F12** toggles enabled/paused, including when those keys are remapped.
@@ -32,7 +31,7 @@ The app recognizes `War3.exe`, `Warcraft III.exe`, and `Warcraft III Reforged.ex
 
 Choose **Settings → Theme** in the top menu to switch instantly between **Ivory**, **Midnight**, **Arcane**, and **Warcraft III**. The Warcraft theme uses the Frozen Throne cover artwork from the user-provided Wikipedia page, with bronze borders and solid panels for readable controls. The artwork and the original keyboard-remapping app icon are embedded in the executable, so no separate files or runtime downloads are needed. Artwork attribution is included in THIRD-PARTY-NOTICES.txt.
 
-Profiles sit in a sidebar; mappings appear as keycaps with direction arrows. Key capture, options, and the status/update bar have separate areas. Buttons, table rows, headers, checkboxes, input fields, and dropdown contents follow the selected palette. Keyboard focus indicators remain visible, and theme text/background pairs are checked for readable contrast. Windows title-bar colors follow the theme where supported by the OS; native scrollbars and standard system message boxes can retain the Windows appearance.
+Profiles span the top. Keypad and standard mapping fields sit side by side, with full-width combination rows below and status at the bottom. Buttons, table rows, headers, checkboxes, input fields, and dropdown contents follow the selected palette. Keyboard focus indicators remain visible, and theme text/background pairs are checked for readable contrast. Windows title-bar colors follow the theme where supported by the OS; native scrollbars and standard system message boxes can retain the Windows appearance.
 
 The theme is saved separately in `MagicKey.theme` beside the executable, using a temporary file and replacement. Theme changes do not rewrite `mywarkey.profiles` or change the profile format. Older profile files, saved languages, and mappings are preserved. Invalid theme preferences fall back to Ivory with a message and leave profiles untouched. In-app updates preserve both files.
 
@@ -42,7 +41,7 @@ Download **MagicKey-windows-x64-portable.zip** from [GitHub Releases](https://gi
 
 A release must first be published by the workflow below before the download links or in-app checks can return an executable. This source tree alone is not a published GitHub release.
 
-The app displays **MagicKey v1.8.0** in its heading. Windows file properties also contain the product name and version, generated from the single version in `CMakeLists.txt`.
+The app displays **MagicKey v1.10.0** in its heading. Windows file properties also contain the product name and version, generated from the single version in `CMakeLists.txt`.
 
 ## Build and publish (maintainers)
 
@@ -55,8 +54,8 @@ To publish a stable release:
 
    ```sh
    git push origin main
-   git tag v1.8.0
-   git push origin v1.8.0
+   git tag v1.10.0
+   git push origin v1.10.0
    ```
 
 3. Open **Actions → Build and release MagicKey**. After compilation, tests, and packaging succeed, the tag run creates a draft release with all four download assets, then publishes it as the latest stable release. A tag that differs from the compiled version fails before publication. Branch and pull-request runs never publish releases.
@@ -74,7 +73,7 @@ If double-clicking an older script seems to do nothing, run it from Command Prom
 
 ## In-app updates
 
-Click **Settings → Check for updates**. MagicKey requests `https://api.github.com/repos/zxiaox/magicKey/releases/latest` in a background worker, compares numeric stable versions (1.10.0 is newer than 1.9.0), and reports whether a newer release exists. Nothing is checked automatically at startup. A missing public release, invalid metadata, connection failure, or GitHub rate limit is reported separately from being up to date.
+Click **Settings → Check for updates**. MagicKey requests `https://api.github.com/repos/zxiaox/magicKey/releases/latest` in a background worker, compares numeric stable versions (1.10.0 is newer than 1.9.0), and reports whether a newer release exists. The same check runs automatically at startup; current-version and failure results stay quiet for automatic checks. Explicit checks report a missing public release, invalid metadata, connection failure, or GitHub rate limit separately from being up to date.
 
 When an update is available, approve **Download and install**. MagicKey downloads only this repository's `MagicKey.exe` release asset over HTTPS, accepts redirects only to GitHub's asset hosts, checks the exact file length and Windows x64 PE header, and verifies SHA-256 against GitHub's asset digest and the attached `MagicKey.exe.sha256` when available. A release must provide a digest or checksum. A checksum checks the asset against release metadata; it is not a publisher code signature or protection against a compromised repository account.
 
@@ -108,9 +107,9 @@ Number labels distinguish **Top row 7** from **Numpad 7**, and likewise for ever
 3. Replace your previous `MagicKey.exe` with `build-windows\Release\MagicKey.exe`, leaving your profile file beside it. If you run the executable directly from the build folder, copy your profile file there too.
 4. Choose your language in **Settings → Language** and leave **Game-compatible input (scan codes)** checked when testing Warcraft III.
 
-The new version reads version-1 and version-2 profile files. An untouched legacy **Default** profile containing exactly A → Q and W → Numpad 7 (version 1), or top-row 7 → Q and 8 → W, is updated to **Numpad 7 → Q**, **Numpad 8 → W**, and **Numpad 5 → R**. Other profiles, including a customized Default profile, are preserved. Each new profile uses Q/W/R/T → Numpad 7/8/4/5 in its dedicated keypad area. Existing empty profiles stay empty; the defaults are only applied on creation. Saving writes settings version 5.
+The new version reads version-1 and version-2 profile files. An untouched legacy **Default** profile containing exactly A → Q and W → Numpad 7 (version 1), or top-row 7 → Q and 8 → W, is updated to the current default mappings. Other profiles, including a customized Default profile, are preserved. Each new profile uses Q/W/R/T → Numpad 7/8/4/5 in its dedicated keypad area. Existing empty profiles stay empty; the defaults are only applied on creation. Saving writes settings version 5.
 
-The next settings change saves the version-4 format with global Windows-key blocking and Quick Chat entries; older executables cannot read that format. Keep your backup if you need to downgrade.
+The next settings change saves the version-5 format with global Windows-key blocking, Quick Chat entries, and combination modes; older executables cannot read that format. Keep your backup if you need to downgrade.
 
 ## Warcraft III: typing works but abilities do not
 
