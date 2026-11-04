@@ -4,6 +4,13 @@
 namespace mywarkey {
 struct Translation { const wchar_t *en, *zh, *ja, *ko; };
 inline constexpr Translation translations[] = {
+    {L"Add row", L"添加行", L"行を追加", L"행 추가"},
+    {L"Key to Send", L"发送按键", L"送信するキー", L"전송할 키"},
+    {L"Keys to Send", L"发送组合按键", L"送信するキー", L"전송할 키 조합"},
+    {L"Key to Press", L"触发按键", L"押すキー", L"누를 키"},
+    {L"Mode", L"模式", L"モード", L"모드"},
+    {L"That key already has a mapping.", L"该按键已有映射。", L"このキーには割り当てがあります。", L"이미 매핑된 키입니다."},
+    {L"Click to capture. Right-click to clear. Changes save automatically.", L"点击录入按键，右键清除。修改自动保存。", L"クリックで入力、右クリックで解除。変更は自動保存されます。", L"클릭하여 입력, 우클릭하여 지우기. 변경 사항은 자동 저장됩니다."},
     {L"Choose a trigger key.", L"请选择触发按键。", L"トリガーキーを指定してください。", L"실행 키를 선택하세요."},
     {L"Combinations", L"组合", L"組み合わせ", L"조합"},
     {L"Input chord", L"输入组合", L"入力コード", L"입력 조합"},

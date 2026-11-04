@@ -141,7 +141,7 @@ void ThemeUI::paint(HDC dc, const RECT& bounds, bool enabled, int language, bool
         }
         line(dc, 24, 103, 876, 103, p.border);
     }
-    for (RECT card : {RECT{24,118,876,198}, RECT{24,210,320,592}, RECT{338,210,876,460}, RECT{338,472,876,650}, RECT{24,676,876,728}}) {
+    for (RECT card : {RECT{24,118,876,198}, RECT{24,210,320,478}, RECT{338,210,876,478}, RECT{24,490,876,732}, RECT{24,742,876,788}}) {
         roundBox(dc, card, p.panel, p.border, selected == ThemeId::Warcraft ? 3 : 16);
         if (selected == ThemeId::Warcraft) {
             for (int x : {card.left + 6, card.right - 6}) for (int y : {card.top + 6, card.bottom - 6}) {
@@ -155,14 +155,8 @@ void ThemeUI::paint(HDC dc, const RECT& bounds, bool enabled, int language, bool
     text(dc, L"MagicKey", {92,23,360,61}, headingFont, selected == ThemeId::Warcraft ? p.accent : p.text);
     const auto subtitle = std::wstring(L"v") + MAGICKEY_VERSION_W + L"  /  " + tr(L"Portable keyboard control");
     text(dc, subtitle.c_str(), {94,64,550,86}, smallFont, p.muted);
-    text(dc, tr(L"Toggle remapping"), {44,516,300,536}, smallFont, p.muted);
-    roundBox(dc, {44,542,300,576}, p.control, p.border, 8);
-    text(dc, L"Ctrl + Alt + F12", {44,542,300,576}, strongFont, p.accent, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-    roundBox(dc, {40,698,48,706}, enabled ? p.success : p.muted, enabled ? p.success : p.muted, 8);
-    text(dc, L"+", {442,570,462,600}, strongFont,p.muted,DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-    text(dc, L"+", {544,570,564,600}, strongFont,p.muted,DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-    text(dc, reverseCombo ? L"\x2190" : L"\x2192", {646,570,672,600}, strongFont,p.muted,DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-    text(dc, L"\x2192", {492,408,506,438}, strongFont, p.muted, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    text(dc, L"Ctrl + Alt + F12", {414,752,658,774}, smallFont, p.muted, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+    roundBox(dc, {40,758,48,766}, enabled ? p.success : p.muted, enabled ? p.success : p.muted, 8);
 }
 LRESULT ThemeUI::button(NMCUSTOMDRAW* draw, ButtonRole role, bool listening, bool checked) const {
     if (draw->dwDrawStage != CDDS_PREPAINT) return CDRF_DODEFAULT;

@@ -20,27 +20,28 @@ constexpr UINT ToggleMessage = WM_APP + 1, InputError = WM_APP + 2, CapturedKey 
 enum ControlId { ProfileBox = 101, NewProfile, RenameProfile, DeleteProfile, ProfileName,
     MappingList, SourceBox, TargetBox, AddMapping, RemoveMapping, BlockWindows, Toggle, LanguageBox, ScanCodes, DisableTarget, CheckUpdates, ThemeBox, SectionProfile, SectionMappings, NewMapping, QuickChatOpen };
 constexpr int NumpadBase = 300;
-constexpr int ComboList = 410, ComboFirst = 411, ComboSecond = 412, ComboThird = 413, ComboTarget = 414, ComboSave = 415, ComboNew = 416, ComboRemove = 417, ComboMode = 418;
-CombinationMode comboMode = CombinationMode::Together;
-HWND comboModeBox, comboHint;
-HWND comboList;
-std::array<HWND,4> comboButtons{};
-std::array<int,3> comboSources{'A','B',0};
-int comboDestination = 'D', comboSelection = -1, comboCapture = -1;
+constexpr int MapRowBase = 10000, ComboRowBase = 20000, MapScroll = 500, ComboScroll = 501;
+struct MappingRow { int sent = -1, pressed = 0, original = 0; };
+struct ComboRow { std::array<int,3> keys{}; int trigger = -1, original = -1; CombinationMode mode = CombinationMode::Together; };
+std::vector<MappingRow> mappingRows;
+std::vector<ComboRow> combinationRows;
+std::vector<HWND> rowControls;
+std::string rowsProfile;
+int mapOffset = 0, comboOffset = 0, rowCapture = -1;
+bool buildingRows = false;
+void renderRows();
+bool saveRow(int id);
 int quickEditingSlot = 0;
 bool quickLoading = false, quickDirty = false;
 HWND inputForeground = nullptr;
 constexpr wchar_t ClassName[] = L"mywarkey.Portable.Window";
-HWND window, profileBox, nameEdit, mappingList, sourceBox, targetBox, toggleButton, statusLabel, scanBox;
+HWND window, profileBox, nameEdit, toggleButton, statusLabel;
 std::vector<std::pair<HWND, std::wstring>> localizedControls;
 HFONT font;
 magickey::ThemeUI themeUI;
 constexpr int LanguageMenu = 2000, ThemeMenu = 2010, NotificationDiagnostics = 2020;
-HIMAGELIST rowImages;
 std::array<HWND, 6> numpadButtons{};
-int numpadEditing = -1, editingSource = -1;
-bool refreshingMappings = false;
-std::string editorProfile;
+int numpadEditing = -1;
 std::array<bool, 10> liveQuickAssigned{};
 HWND quickChatWindow = nullptr, quickSlotBox = nullptr, quickTextEdit = nullptr;
 void openQuickChat();
@@ -60,7 +61,6 @@ std::mutex engineMutex;
 Remapper engine;
 KeyCapture capture;
 unsigned captureGeneration = 0;
-int sourceChoice = VK_NUMPAD7, targetChoice = 'Q';
 Profile liveProfile;
 bool liveEnabled = false;
 bool liveScanCodes = true;
@@ -69,7 +69,7 @@ GameNotifications gameNotifications;
 std::atomic_bool notificationTyping{false}, cancelNotification{false};
 constexpr UINT_PTR NotificationTimer = 77;
 magickey::updates::Client updateClient;
-bool downloadingUpdate = false, closeAfterUpdate = false;
+bool downloadingUpdate = false, closeAfterUpdate = false, silentUpdateCheck = false;
 
 const wchar_t* tr(const wchar_t* text) { return translate(text, settings.language); }
 
@@ -317,30 +317,15 @@ void changeTheme(int choice) {
         output.close();
         if (!output || !MoveFileExW(temporary.c_str(), themePath.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
             throw std::runtime_error("Theme save failed");
-        themeUI.apply(window, mappingList, magickey::ThemeId(choice));
+        themeUI.apply(window, nullptr, magickey::ThemeId(choice));
     } catch (...) { error(L"Could not save the theme. Check that the app folder is writable."); }
     refreshMenus();
 }
 void updateCaptureButtons() {
     CaptureSlot slot;
     { std::lock_guard<std::mutex> lock(engineMutex); slot = capture.activeSlot(); }
-    auto source = slot == CaptureSlot::Source ? std::wstring(tr(L"Press a key...")) : keyName(sourceChoice);
-    auto target = slot == CaptureSlot::Target && numpadEditing < 0 && comboCapture < 0 ? std::wstring(tr(L"Press a key...")) : keyName(targetChoice);
-    SetWindowTextW(sourceBox, source.c_str());
-    SetWindowTextW(targetBox, target.c_str());
     const auto& mappings = settings.profiles[settings.selected].mappings;
-    SetWindowTextW(GetDlgItem(window, AddMapping), tr(editingSource >= 0 || mappings.count(sourceChoice) ? L"Update" : L"Add"));
-    for (int i = 0; i < 4; ++i) {
-        int value = i == 3 ? comboDestination : comboSources[i];
-        auto label = comboCapture == i && slot != CaptureSlot::None ? std::wstring(tr(L"Press a key...")) : value ? keyName(value) : std::wstring(L"-");
-        SetWindowTextW(comboButtons[i],label.c_str());
-    }
-    SendMessageW(comboModeBox,CB_RESETCONTENT,0,0);
-    for (auto name : {L"Input chord",L"Together",L"Sequence"}) SendMessageW(comboModeBox,CB_ADDSTRING,0,LPARAM(tr(name)));
-    SendMessageW(comboModeBox,CB_SETCURSEL,int(comboMode),0);
-    SetWindowTextW(comboHint,tr(comboMode == CombinationMode::InputChord ? L"Press 2–3 keys within 150 ms. Right-click the third key to clear it." : L"Right key triggers the left keys. Right-click the third key to clear it."));
-    InvalidateRect(window,nullptr,FALSE);
-    SetWindowTextW(GetDlgItem(window,ComboSave),tr(comboSelection >= 0 ? L"Update" : L"Add"));
+    if (rowCapture >= 0) SetWindowTextW(GetDlgItem(window,rowCapture),tr(L"Press a key..."));
     for (int i = 0; i < 6; ++i) {
         auto found = std::find_if(mappings.begin(),mappings.end(),[i](const auto& entry) { return entry.second == CustomNumpadKeys[i]; });
         auto text = numpadEditing == i && slot == CaptureSlot::Target ? std::wstring(tr(L"Press a key...")) :
@@ -349,8 +334,10 @@ void updateCaptureButtons() {
     }
 }
 void cancelCapture() {
-    numpadEditing = -1; comboCapture = -1;
+    bool wasRow = rowCapture >= 0;
+    numpadEditing = -1; rowCapture = -1;
     { std::lock_guard<std::mutex> lock(engineMutex); capture.cancel(); ++captureGeneration; }
+    if (wasRow) renderRows();
     updateCaptureButtons();
 }
 void updateUpdateButton() {
@@ -359,11 +346,11 @@ void updateUpdateButton() {
     HMENU menu = GetSubMenu(GetMenu(window), 0);
     ModifyMenuW(menu, CheckUpdates, MF_BYCOMMAND | MF_STRING | (updateClient.busy() ? MF_GRAYED : MF_ENABLED), CheckUpdates, tr(text));
 }
-void beginUpdateCheck() {
+void beginUpdateCheck(bool silent = false) {
     if (updateClient.busy()) return;
-    downloadingUpdate = false;
+    downloadingUpdate = false; silentUpdateCheck = silent;
     try { updateClient.check(window, UpdateFinished); }
-    catch (...) { error(magickey::updates::failureMessage(magickey::updates::Failure::Network)); }
+    catch (...) { if (!silent) error(magickey::updates::failureMessage(magickey::updates::Failure::Network)); }
     updateUpdateButton();
 }
 void refresh();
@@ -379,7 +366,7 @@ void finishUpdate() {
     }
     switch (result.outcome) {
         case Outcome::Current:
-            MessageBoxW(window, tr(L"You are using the latest version of MagicKey."), L"MagicKey", MB_OK | MB_ICONINFORMATION);
+            if (!silentUpdateCheck) MessageBoxW(window, tr(L"You are using the latest version of MagicKey."), L"MagicKey", MB_OK | MB_ICONINFORMATION);
             break;
         case Outcome::Available: {
             auto prompt = std::wstring(tr(L"A new version is available: ")) + wide(result.release.tag) +
@@ -398,7 +385,7 @@ void finishUpdate() {
             try { launchInstaller(result, settings.language); DestroyWindow(window); }
             catch (...) { discardStaging(result.staging); refresh(); error(failureMessage(Failure::Install)); }
             break;
-        case Outcome::Failed: error(failureMessage(result.failure)); break;
+        case Outcome::Failed: if (!silentUpdateCheck || downloadingUpdate) error(failureMessage(result.failure)); break;
         case Outcome::Cancelled: break;
     }
 }
@@ -406,11 +393,6 @@ void refresh() {
     for (const auto& entry : localizedControls) SetWindowTextW(entry.first, tr(entry.second.c_str()));
     refreshMenus();
     updateCaptureButtons();
-    LVCOLUMNW column{}; column.mask = LVCF_TEXT;
-    column.pszText = const_cast<wchar_t*>(tr(L"When you press"));
-    ListView_SetColumn(mappingList, 0, &column);
-    column.pszText = const_cast<wchar_t*>(tr(L"Send instead"));
-    ListView_SetColumn(mappingList, 1, &column);
     SendMessageW(profileBox, CB_RESETCONTENT, 0, 0);
     for (std::size_t i = 0; i < settings.profiles.size(); ++i) {
         auto label = wide(settings.profiles[i].name);
@@ -420,42 +402,17 @@ void refresh() {
     SendMessageW(profileBox, CB_SETCURSEL, settings.selected, 0);
     const auto& p = settings.profiles[settings.selected];
     SetWindowTextW(nameEdit, wide(p.name).c_str());
-    if (editorProfile != p.name) {
-        comboSelection = -1; comboMode = CombinationMode::Together; comboSources = {'A','B',0}; comboDestination = 'D';
-        if (!p.combinations.empty()) { comboSelection = 0; const auto& c = p.combinations[0]; comboMode = c.mode; comboSources = {c.keys[0],c.keys[1],c.keys.size() == 3 ? c.keys[2] : 0}; comboDestination = c.target; }
-        editorProfile = p.name; editingSource = -1; sourceChoice = 'A'; targetChoice = 'Q';
-        for (auto [from, to] : p.mappings) if (!customNumpadKey(to)) { editingSource = sourceChoice = from; targetChoice = to; break; }
-    }
-    if (editingSource >= 0 && !p.mappings.count(editingSource)) editingSource = -1;
-    refreshingMappings = true;
-    ListView_DeleteAllItems(mappingList);
-    for (auto [from, to] : p.mappings) {
-        if (customNumpadKey(to)) continue;
-        auto source = keyName(from), target = keyName(to);
-        LVITEMW item{};
-        item.mask = LVIF_PARAM;
-        item.iItem = ListView_GetItemCount(mappingList);
-        item.lParam = from;
-        int row = ListView_InsertItem(mappingList, &item);
-        
-        if (from == editingSource) ListView_SetItemState(mappingList, row, LVIS_SELECTED, LVIS_SELECTED);
-    }
-    SendMessageW(comboList,LB_RESETCONTENT,0,0);
-    for (const auto& c : p.combinations) {
-        std::wstring label;
-        for (int key : c.keys) { if (!label.empty()) label += L" + "; label += keyName(key); }
-        if (c.mode == CombinationMode::InputChord) label += L"  \x2192  " + keyName(c.target);
-        else {
-            label = keyName(c.target) + L"  \x2192  ";
-            for (int key : c.keys) { if (label.back() != L' ') label += c.mode == CombinationMode::Together ? L" + " : L" \x2192 "; label += keyName(key); }
-            label += c.mode == CombinationMode::Together ? L"  [" + std::wstring(tr(L"Together")) + L"]" : L"  [" + std::wstring(tr(L"Sequence")) + L"]";
+    if (rowsProfile != p.name) {
+        rowsProfile = p.name; mappingRows.clear(); combinationRows.clear(); mapOffset = comboOffset = 0;
+        for (auto [from,to] : p.mappings) if (!customNumpadKey(to)) mappingRows.push_back({to,from,from});
+        for (int i = 0; i < int(p.combinations.size()); ++i) {
+            const auto& c = p.combinations[i];
+            combinationRows.push_back({{c.keys[0],c.keys[1],c.keys.size()==3 ? c.keys[2] : 0},c.target,i,c.mode});
         }
-        SendMessageW(comboList,LB_ADDSTRING,0,LPARAM(label.c_str()));
+        if (mappingRows.empty()) mappingRows.push_back({});
+        if (combinationRows.empty()) combinationRows.push_back({});
     }
-    SendMessageW(comboList,LB_SETCURSEL,comboSelection,0);
-    refreshingMappings = false; updateCaptureButtons();
-    RECT listBounds; GetClientRect(mappingList, &listBounds);
-    ListView_SetColumnWidth(mappingList, 1, listBounds.right - ListView_GetColumnWidth(mappingList, 0));
+    renderRows(); updateCaptureButtons();
     SetWindowTextW(toggleButton, tr(enabled ? L"Pause remapping" : L"Enable remapping"));
     SetWindowTextW(statusLabel, tr(enabled ? L"Remapping active" : L"Remapping paused"));
     EnableWindow(GetDlgItem(window, DeleteProfile), settings.profiles.size() > 1);
@@ -471,6 +428,86 @@ std::string enteredName() {
     name = name.substr(first, name.find_last_not_of(L" \t\r\n") - first + 1);
     for (wchar_t c : name) if (c < 32) return {};
     return utf8(name);
+}
+void renderRows() {
+    int focusedId = GetDlgCtrlID(GetFocus());
+    buildingRows = true;
+    for (HWND item : rowControls) DestroyWindow(item);
+    rowControls.clear();
+    auto add = [](const wchar_t* type, const std::wstring& text, DWORD style, int id, int x, int y, int width, int height) {
+        HWND item = control(type,L"",style,id,x,y,width,height);
+        SetWindowTextW(item,text.c_str()); rowControls.push_back(item); return item;
+    };
+    auto scroll = [](int id, int& offset, int count, int page) {
+        offset = std::clamp(offset,0,std::max(0,count-page));
+        SCROLLINFO info{sizeof(info),SIF_RANGE|SIF_PAGE|SIF_POS,0,std::max(0,count-1),UINT(page),offset};
+        SetScrollInfo(GetDlgItem(window,id),SB_CTL,&info,TRUE);
+        EnableWindow(GetDlgItem(window,id),count > page);
+    };
+    scroll(MapScroll,mapOffset,int(mappingRows.size()),4);
+    scroll(ComboScroll,comboOffset,int(combinationRows.size()),3);
+    for (int i = mapOffset; i < std::min(int(mappingRows.size()),mapOffset+4); ++i) {
+        const auto& r = mappingRows[i]; int y=292+(i-mapOffset)*44, id=MapRowBase+i*3;
+        add(L"BUTTON",r.sent < 0 ? L"" : keyName(r.sent),WS_TABSTOP,id,360,y,180,36);
+        add(L"STATIC",L"\x2190",0,0,542,y+6,24,26);
+        add(L"BUTTON",r.pressed ? keyName(r.pressed) : L"",WS_TABSTOP,id+1,568,y,180,36);
+        add(L"BUTTON",L"\x00d7",WS_TABSTOP,id+2,770,y,64,36);
+    }
+    for (int i = comboOffset; i < std::min(int(combinationRows.size()),comboOffset+3); ++i) {
+        const auto& r = combinationRows[i]; int y=560+(i-comboOffset)*44, id=ComboRowBase+i*6;
+        for (int f=0; f<3; ++f) {
+            add(L"BUTTON",r.keys[f] ? keyName(r.keys[f]) : L"",WS_TABSTOP,id+f,44+f*116,y,96,36);
+            if (f<2) add(L"STATIC",r.mode == CombinationMode::Sequence ? L"\x2192" : L"+",0,0,140+f*116,y+6,20,26);
+        }
+        add(L"STATIC",r.mode == CombinationMode::InputChord ? L"\x2192" : L"\x2190",0,0,380,y+6,28,26);
+        add(L"BUTTON",r.trigger >= 0 ? keyName(r.trigger) : L"",WS_TABSTOP,id+3,410,y,134,36);
+        HWND mode = add(WC_COMBOBOXW,L"",CBS_DROPDOWNLIST | WS_TABSTOP,id+4,570,y,184,200);
+        for (auto name : {L"Input chord",L"Together",L"Sequence"}) SendMessageW(mode,CB_ADDSTRING,0,LPARAM(tr(name)));
+        SendMessageW(mode,CB_SETITEMHEIGHT,WPARAM(-1),28); SendMessageW(mode,CB_SETCURSEL,int(r.mode),0);
+        add(L"BUTTON",L"\x00d7",WS_TABSTOP,id+5,770,y,64,36);
+    }
+    buildingRows = false;
+    if (focusedId >= MapRowBase) { HWND next=GetDlgItem(window,focusedId); if (next) SetFocus(next); }
+    InvalidateRect(window,nullptr,FALSE);
+}
+bool saveRow(int id) {
+    auto candidate = settings;
+    auto& profile = candidate.profiles[candidate.selected];
+    if (id < ComboRowBase) {
+        auto& row = mappingRows[(id-MapRowBase)/3];
+        if (row.sent < 0 || !row.pressed) {
+            if (row.original) { profile.mappings.erase(row.original); if (!commit(std::move(candidate))) return false; row.original=0; }
+            return true;
+        }
+        if (row.sent == row.pressed) { error(L"Choose a different destination, or remove the mapping to restore the key."); return false; }
+        if (row.pressed != row.original && profile.mappings.count(row.pressed)) { error(L"That key already has a mapping."); return false; }
+        profile.mappings.erase(row.original); profile.mappings[row.pressed] = row.sent;
+        if (!commit(std::move(candidate))) return false; row.original = row.pressed;
+    } else {
+        auto& row = combinationRows[(id-ComboRowBase)/6];
+        std::vector<int> keys; for (int key : row.keys) if (key) keys.push_back(key);
+        if (keys.size() < 2 || row.trigger < 0 || (row.mode != CombinationMode::InputChord && !row.trigger)) {
+            if (row.original >= 0) {
+                int old = row.original;
+                profile.combinations.erase(profile.combinations.begin()+old);
+                if (!commit(std::move(candidate))) return false;
+                row.original=-1; for (auto& r : combinationRows) if (r.original > old) --r.original;
+            }
+            return true;
+        }
+        try {
+            keys = combinationKeys(std::move(keys),row.mode);
+            const auto& list = profile.combinations;
+            for (int i=0; i<int(list.size()); ++i) if (i != row.original &&
+                (row.mode == CombinationMode::InputChord ? list[i].mode == row.mode && list[i].keys == keys : list[i].mode != CombinationMode::InputChord && list[i].target == row.trigger))
+                throw std::runtime_error("That combination already exists.");
+            Combination entry{keys,row.trigger,row.mode};
+            int index = row.original < 0 ? int(list.size()) : row.original;
+            if (row.original < 0) profile.combinations.push_back(entry); else profile.combinations[index]=entry;
+            if (!commit(std::move(candidate))) return false; row.original=index;
+        } catch (const std::exception& e) { error(wide(e.what())); return false; }
+    }
+    return true;
 }
 void makeInterface() {
     control(L"STATIC",L"Configuration Schemes",0,SectionProfile,44,130,230,20);
@@ -488,46 +525,25 @@ void makeInterface() {
         control(L"STATIC",digit.c_str(),0,0,x,y+9,28,24); localizedControls.pop_back();
         numpadButtons[i] = control(L"BUTTON",L"",WS_TABSTOP,NumpadBase+i,x+32,y,92,40);
     }
-    control(L"BUTTON",L"Quick Chat",WS_TABSTOP,QuickChatOpen,44,452,256,34);
-    control(L"STATIC",L"Alt + 1–0: Quick Chat",0,0,44,494,256,20);
-    control(L"STATIC",L"Key Mapping",0,SectionMappings,360,222,250,20);
-    control(L"BUTTON",L"New",WS_TABSTOP,NewMapping,666,216,88,30);
-    control(L"BUTTON",L"Remove",WS_TABSTOP,RemoveMapping,766,216,88,30);
-    control(L"STATIC",L"When you press",0,0,372,250,190,20);
-    control(L"STATIC",L"Send instead",0,0,584,250,250,20);
-    mappingList = control(WC_LISTVIEWW,L"",LVS_REPORT | LVS_NOCOLUMNHEADER | LVS_NOLABELWRAP | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_SHAREIMAGELISTS | WS_TABSTOP,MappingList,360,274,494,124);
-    ListView_SetExtendedListViewStyle(mappingList,LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER);
-    HWND tip = ListView_SetToolTips(mappingList,nullptr);
-    if (tip) DestroyWindow(tip);
-    ShowWindow(ListView_GetHeader(mappingList),SW_HIDE);
-    rowImages = ImageList_Create(1,30,ILC_COLOR32,1,0);
-    ListView_SetImageList(mappingList,rowImages,LVSIL_SMALL);
-    LVCOLUMNW column{}; column.mask = LVCF_TEXT | LVCF_WIDTH;
-    column.pszText = const_cast<wchar_t*>(L"When you press"); column.cx = 212; ListView_InsertColumn(mappingList,0,&column);
-    column.pszText = const_cast<wchar_t*>(L"Send instead"); column.cx = 282; ListView_InsertColumn(mappingList,1,&column);
-    sourceBox = control(L"BUTTON",L"",WS_TABSTOP,SourceBox,360,408,132,30);
-    targetBox = control(L"BUTTON",L"",WS_TABSTOP,TargetBox,506,408,132,30);
-    control(L"BUTTON",L"Disabled",WS_TABSTOP,DisableTarget,650,408,90,30);
-    control(L"BUTTON",L"Add",WS_TABSTOP,AddMapping,750,408,104,30);
-    control(L"STATIC",L"Click a key, then press its replacement.",0,0,360,442,494,16);
-    control(L"STATIC",L"Combinations",0,0,360,484,106,20);
-    comboModeBox = control(WC_COMBOBOXW,L"",CBS_DROPDOWNLIST | WS_TABSTOP,ComboMode,470,478,184,200);
-    for (auto mode : {L"Input chord",L"Together",L"Sequence"}) SendMessageW(comboModeBox,CB_ADDSTRING,0,LPARAM(tr(mode)));
-    SendMessageW(comboModeBox,CB_SETITEMHEIGHT,WPARAM(-1),28);
-    control(L"BUTTON",L"New",WS_TABSTOP,ComboNew,666,478,88,28);
-    control(L"BUTTON",L"Remove",WS_TABSTOP,ComboRemove,766,478,88,28);
-    comboList = control(L"LISTBOX",L"",LBS_NOTIFY | LBS_NOINTEGRALHEIGHT | WS_VSCROLL | WS_TABSTOP,ComboList,360,510,494,48);
-    comboButtons[0] = control(L"BUTTON",L"",WS_TABSTOP,ComboFirst,360,570,82,30);
-    comboButtons[1] = control(L"BUTTON",L"",WS_TABSTOP,ComboSecond,462,570,82,30);
-    comboButtons[2] = control(L"BUTTON",L"",WS_TABSTOP,ComboThird,564,570,82,30);
-    comboButtons[3] = control(L"BUTTON",L"",WS_TABSTOP,ComboTarget,672,570,74,30);
-    control(L"BUTTON",L"Add",WS_TABSTOP,ComboSave,758,570,96,30);
-    comboHint = control(L"STATIC",L"Press 2–3 keys within 150 ms. Right-click the third key to clear it.",0,0,360,610,494,30);
-    statusLabel = control(L"STATIC",L"",0,0,58,692,590,22);
+    control(L"STATIC",L"Key Mapping",0,SectionMappings,360,228,270,22);
+    control(L"BUTTON",L"Add row",WS_TABSTOP,NewMapping,740,222,114,30);
+    control(L"STATIC",L"Key to Send",0,0,360,264,190,22);
+    control(L"STATIC",L"Key to Press",0,0,568,264,190,22);
+    control(L"SCROLLBAR",L"",SBS_VERT,MapScroll,854,292,16,176);
+    control(L"STATIC",L"Multi-Key Combinations",0,0,44,498,390,22);
+    control(L"BUTTON",L"Add row",WS_TABSTOP,416,740,492,114,30);
+    control(L"STATIC",L"Keys to Send",0,0,44,532,330,20);
+    control(L"STATIC",L"Key to Press",0,0,410,532,130,20);
+    control(L"STATIC",L"Mode",0,0,570,532,200,20);
+    control(L"SCROLLBAR",L"",SBS_VERT,ComboScroll,854,560,16,132);
+    control(L"BUTTON",L"Quick Chat",WS_TABSTOP,QuickChatOpen,44,438,124,30);
+    control(L"STATIC",L"Alt + 1–0",0,0,180,444,124,20);
+    control(L"STATIC",L"Click to capture. Right-click to clear. Changes save automatically.",0,0,44,706,810,20);
+    statusLabel = control(L"STATIC",L"",0,0,58,752,590,22);
     SendMessageW(statusLabel,WM_SETFONT,WPARAM(font),TRUE);
-    toggleButton = control(L"BUTTON",L"",WS_TABSTOP,Toggle,676,686,178,32);
+    toggleButton = control(L"BUTTON",L"",WS_TABSTOP,Toggle,676,746,178,32);
     SendMessageW(profileBox,CB_SETITEMHEIGHT,WPARAM(-1),28);
-    themeUI.apply(window,mappingList,themeUI.theme()); refresh();
+    themeUI.apply(window,nullptr,themeUI.theme()); refresh();
 }
 
 void loadQuickChatSlot(bool loadText = true) {
@@ -630,76 +646,51 @@ void openQuickChat() {
     ShowWindow(quickChatWindow,SW_SHOW); SetForegroundWindow(quickChatWindow);
 }
 void command(int id, int notification) {
-    if (id == ComboMode && notification == CBN_SELCHANGE) {
-        int selected = int(SendMessageW(comboModeBox,CB_GETCURSEL,0,0));
-        if (selected < 0 || selected > 2) return;
-        cancelCapture(); comboMode = CombinationMode(selected); updateCaptureButtons(); return;
-    }
-    if (id >= ComboFirst && id <= ComboTarget && notification == BN_CLICKED) {
-        int field = id-ComboFirst; bool again = comboCapture == field;
-        cancelCapture();
-        if (!again) { comboCapture = field; std::lock_guard<std::mutex> lock(engineMutex); engine.release(sendKey); capture.arm(CaptureSlot::Target); ++captureGeneration; }
+    if (buildingRows) return;
+    if (id >= MapRowBase && id < ComboRowBase + 600) {
+        bool combo = id >= ComboRowBase; int field = (id-(combo ? ComboRowBase : MapRowBase)) % (combo ? 6 : 3);
+        int index = (id-(combo ? ComboRowBase : MapRowBase)) / (combo ? 6 : 3);
+        if (combo ? index >= int(combinationRows.size()) : index >= int(mappingRows.size())) return;
+        if (combo && field == 4 && notification == CBN_SELCHANGE) {
+            int value = int(SendMessageW(GetDlgItem(window,id),CB_GETCURSEL,0,0));
+            cancelCapture(); auto old = combinationRows[index]; combinationRows[index].mode = CombinationMode(value); if (!saveRow(id)) combinationRows[index]=old; renderRows(); return;
+        }
+        if (notification != BN_CLICKED) return;
+        if (field == (combo ? 5 : 2)) {
+            cancelCapture(); auto candidate = settings;
+            if (combo) {
+                int original = combinationRows[index].original;
+                if (original >= 0) candidate.profiles[candidate.selected].combinations.erase(candidate.profiles[candidate.selected].combinations.begin()+original);
+                if (!commit(std::move(candidate))) return;
+                combinationRows.erase(combinationRows.begin()+index);
+                for (auto& row : combinationRows) if (row.original > original && original >= 0) --row.original;
+            } else {
+                candidate.profiles[candidate.selected].mappings.erase(mappingRows[index].original);
+                if (!commit(std::move(candidate))) return;
+                mappingRows.erase(mappingRows.begin()+index);
+            }
+            renderRows(); return;
+        }
+        bool again = rowCapture == id; cancelCapture(); renderRows();
+        if (!again) { rowCapture = id; std::lock_guard<std::mutex> lock(engineMutex); engine.release(sendKey); capture.arm(CaptureSlot::Target); ++captureGeneration; }
         updateCaptureButtons(); return;
     }
     if (id >= NumpadBase && id < NumpadBase + 6 && notification == BN_CLICKED) {
-        int index = id - NumpadBase;
-        bool again = numpadEditing == index;
-        cancelCapture();
-        if (!again) {
-            numpadEditing = index;
-            std::lock_guard<std::mutex> lock(engineMutex);
-            engine.release(sendKey); capture.arm(CaptureSlot::Target); ++captureGeneration;
-        }
+        bool again = numpadEditing == id-NumpadBase; cancelCapture(); renderRows();
+        if (!again) { numpadEditing = id-NumpadBase; std::lock_guard<std::mutex> lock(engineMutex); engine.release(sendKey); capture.arm(CaptureSlot::Target); ++captureGeneration; }
         updateCaptureButtons(); return;
     }
-    if (id == SourceBox || id == TargetBox) {
-        numpadEditing = -1;
-        if (notification != BN_CLICKED) return;
-        auto slot = id == SourceBox ? CaptureSlot::Source : CaptureSlot::Target;
-        {
-            std::lock_guard<std::mutex> lock(engineMutex);
-            ++captureGeneration;
-            if (capture.activeSlot() == slot) capture.cancel();
-            else { engine.release(sendKey); capture.arm(slot); }
-        }
-        updateCaptureButtons();
-        return;
-    }
-    if (id == ProfileName || (notification != BN_CLICKED && notification != CBN_SELCHANGE && notification != LBN_SELCHANGE)) return;
+    if (id == ProfileName || notification == EN_CHANGE) return;
     cancelCapture();
-    if (id >= ThemeMenu && id < ThemeMenu + 4) { changeTheme(id - ThemeMenu); return; }
-    if (id == ComboList && notification == LBN_SELCHANGE) {
-        int index = int(SendMessageW(comboList,LB_GETCURSEL,0,0));
-        const auto& list = settings.profiles[settings.selected].combinations;
-        if (index >= 0 && index < int(list.size())) { comboSelection = index; const auto& c = list[index]; comboMode = c.mode; comboSources = {c.keys[0],c.keys[1],c.keys.size()==3 ? c.keys[2] : 0}; comboDestination = c.target; updateCaptureButtons(); }
-        return;
-    }
-    if (id == ComboNew) { comboSelection = -1; comboMode = CombinationMode::Together; comboSources = {'A','B',0}; comboDestination = 'D'; SendMessageW(comboList,LB_SETCURSEL,WPARAM(-1),0); updateCaptureButtons(); return; }
-    if (id == ComboSave || id == ComboRemove) {
-        auto candidate = settings; auto& list = candidate.profiles[candidate.selected].combinations;
-        if (id == ComboRemove) {
-            if (comboSelection < 0 || comboSelection >= int(list.size())) return;
-            list.erase(list.begin()+comboSelection); comboSelection = -1;
-        } else {
-            try {
-                std::vector<int> keys{comboSources[0],comboSources[1]}; if (comboSources[2]) keys.push_back(comboSources[2]);
-                if (comboMode != CombinationMode::InputChord && comboDestination == 0) throw std::runtime_error("Choose a trigger key.");
-                keys = combinationKeys(std::move(keys),comboMode);
-                for (int i = 0; i < int(list.size()); ++i) if (i != comboSelection && (comboMode == CombinationMode::InputChord ? list[i].mode == comboMode && list[i].keys == keys : list[i].mode != CombinationMode::InputChord && list[i].target == comboDestination)) throw std::runtime_error("That combination already exists.");
-                if (comboSelection < 0 && list.size() >= 100) throw std::runtime_error("Too many combinations.");
-                if (comboSelection >= 0 && comboSelection < int(list.size())) list[comboSelection] = {keys,comboDestination,comboMode};
-                else { list.push_back({keys,comboDestination,comboMode}); comboSelection = int(list.size())-1; }
-            } catch (const std::exception& e) { error(wide(e.what())); return; }
-        }
-        commit(std::move(candidate)); refresh(); return;
+    if (id >= ThemeMenu && id < ThemeMenu + 4) { changeTheme(id-ThemeMenu); renderRows(); return; }
+    if (id == NewMapping || id == 416) {
+        if (id == NewMapping) { if (mappingRows.size() >= 254) return; mappingRows.push_back({}); mapOffset = std::max(0,int(mappingRows.size())-4); }
+        else { if (combinationRows.size() >= 100) return; combinationRows.push_back({}); comboOffset = std::max(0,int(combinationRows.size())-3); }
+        renderRows(); return;
     }
     if (id == QuickChatOpen) { openQuickChat(); return; }
-    if (id == NewMapping) { editingSource = -1; sourceChoice = 'A'; targetChoice = 'Q';
-        while (sourceChoice < 'Z' && settings.profiles[settings.selected].mappings.count(sourceChoice)) ++sourceChoice;
-        refreshingMappings = true; ListView_SetItemState(mappingList, -1, 0, LVIS_SELECTED); refreshingMappings = false; updateCaptureButtons(); return; }
     if (id == NotificationDiagnostics) { MessageBoxW(window, gameNotifications.diagnostics().c_str(), tr(L"Notification diagnostics"), MB_OK | MB_ICONINFORMATION); return; }
     if (id == CheckUpdates) { beginUpdateCheck(); return; }
-    if (id == DisableTarget) { targetChoice = 0; updateCaptureButtons(); return; }
     auto candidate = settings;
     auto& p = candidate.profiles[candidate.selected];
     if (id == Toggle) {
@@ -732,31 +723,14 @@ void command(int id, int notification) {
         candidate.selected = std::min(candidate.selected, candidate.profiles.size() - 1);
     } else if (id == BlockWindows) {
         candidate.blockWindows = !settings.blockWindows;
-    } else if (id == AddMapping) {
-        int source = sourceChoice, target = targetChoice;
-        if (source < 0 || target < 0) { error(L"Select a source key and a destination."); return; }
-        if (source == target) { error(L"Choose a different destination, or remove the mapping to restore the key."); return; }
-        if (editingSource >= 0 && editingSource != source) p.mappings.erase(editingSource);
-        p.mappings[source] = target;
-    } else if (id == RemoveMapping) {
-        int row = ListView_GetNextItem(mappingList, -1, LVNI_SELECTED);
-        if (row == -1) { error(L"Select a mapping in the list to remove it."); return; }
-        LVITEMW item{}; item.mask = LVIF_PARAM; item.iItem = row;
-        ListView_GetItem(mappingList, &item);
-        p.mappings.erase(int(item.lParam));
     } else return;
-    if (commit(std::move(candidate)) && id == AddMapping) editingSource = sourceChoice;
+    commit(std::move(candidate));
     refresh();
 }
 LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
     static const UINT taskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
     if (message == taskbarCreated) { magickey::setWindowIdentity(hwnd); return 0; }
     switch (message) {
-        case WM_APP+20: case WM_APP+21: {
-            int key = int(w);
-            if (message == WM_APP+21) { auto& mappings = settings.profiles[settings.selected].mappings; auto found = mappings.find(key); if (found != mappings.end()) key = found->second; }
-            auto text = keyName(key); wcsncpy_s(reinterpret_cast<wchar_t*>(l),512,text.c_str(),_TRUNCATE); return 0;
-        }
         case WM_CREATE: window = hwnd; makeInterface(); SetTimer(hwnd, NotificationTimer, 25, nullptr); return 0;
         case WM_ERASEBKGND: return 1;
         case WM_PAINT: {
@@ -766,14 +740,14 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
             HDC memory = CreateCompatibleDC(dc);
             HBITMAP bitmap = CreateCompatibleBitmap(dc, bounds.right, bounds.bottom);
             auto old = SelectObject(memory, bitmap);
-            themeUI.paint(memory, bounds, enabled, settings.language, comboMode != CombinationMode::InputChord);
+            themeUI.paint(memory, bounds, enabled, settings.language, false);
             BitBlt(dc, 0, 0, bounds.right, bounds.bottom, memory, 0, 0, SRCCOPY);
             SelectObject(memory, old); DeleteObject(bitmap); DeleteDC(memory);
             EndPaint(hwnd, &paint); return 0;
         }
         case WM_PRINTCLIENT: {
             RECT bounds; GetClientRect(hwnd, &bounds);
-            themeUI.paint(reinterpret_cast<HDC>(w), bounds, enabled, settings.language, comboMode != CombinationMode::InputChord);
+            themeUI.paint(reinterpret_cast<HDC>(w), bounds, enabled, settings.language, false);
             return 0;
         }
         case WM_MEASUREITEM: {
@@ -786,20 +760,37 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
             if (item->CtlType == ODT_COMBOBOX) { themeUI.combo(item); return TRUE; }
             if (item->CtlType == ODT_BUTTON) {
                 auto role = magickey::ButtonRole::Secondary;
-                if (item->CtlID == Toggle || item->CtlID == AddMapping || item->CtlID == ComboSave) role = magickey::ButtonRole::Primary;
+                if (item->CtlID == Toggle || item->CtlID == AddMapping) role = magickey::ButtonRole::Primary;
                 if (item->CtlID == ScanCodes) role = magickey::ButtonRole::Checkbox;
-                if (item->CtlID == SourceBox || item->CtlID == TargetBox || (item->CtlID >= NumpadBase && item->CtlID < NumpadBase + 6) || (item->CtlID >= ComboFirst && item->CtlID <= ComboTarget)) role = magickey::ButtonRole::Key;
-                CaptureSlot slot;
-                { std::lock_guard<std::mutex> lock(engineMutex); slot = capture.activeSlot(); }
-                bool listening = (slot == CaptureSlot::Source && item->CtlID == SourceBox) ||
-                    (slot == CaptureSlot::Target && ((numpadEditing < 0 && comboCapture < 0 && item->CtlID == TargetBox) || item->CtlID == NumpadBase + numpadEditing || (comboCapture >= 0 && item->CtlID == ComboFirst+comboCapture)));
+                bool dynamicKey = (item->CtlID >= MapRowBase && item->CtlID < ComboRowBase && (item->CtlID-MapRowBase)%3 < 2) ||
+                    (item->CtlID >= ComboRowBase && (item->CtlID-ComboRowBase)%6 < 4);
+                if (dynamicKey || (item->CtlID >= NumpadBase && item->CtlID < NumpadBase+6)) role = magickey::ButtonRole::Key;
+                bool listening = rowCapture == int(item->CtlID) || numpadEditing >= 0 && item->CtlID == NumpadBase+numpadEditing;
                 themeUI.ownerButton(item, role, listening, settings.scanCodes); return TRUE;
             }
             break;
         }
         case WM_CONTEXTMENU: {
             int id = GetDlgCtrlID(reinterpret_cast<HWND>(w));
-            if (id == ComboThird) { cancelCapture(); comboSources[2] = 0; updateCaptureButtons(); return 0; }
+            if (id >= MapRowBase && id < ComboRowBase+600) {
+                cancelCapture(); auto oldMaps=mappingRows; auto oldCombos=combinationRows;
+                bool changed=false;
+                if (id >= ComboRowBase) {
+                    int i=(id-ComboRowBase)/6, field=(id-ComboRowBase)%6;
+                    if (i < int(combinationRows.size()) && field < 4) { if (field<3) combinationRows[i].keys[field]=0; else combinationRows[i].trigger=-1; changed=true; }
+                } else {
+                    int i=(id-MapRowBase)/3, field=(id-MapRowBase)%3;
+                    if (i < int(mappingRows.size()) && field < 2) {
+                        if (field == 0) {
+                            HMENU menu=CreatePopupMenu(); AppendMenuW(menu,MF_STRING,1,tr(L"Clear")); AppendMenuW(menu,MF_STRING,2,tr(L"Disabled"));
+                            POINT at; GetCursorPos(&at); int choice=TrackPopupMenu(menu,TPM_RETURNCMD|TPM_RIGHTBUTTON,at.x,at.y,0,hwnd,nullptr); DestroyMenu(menu);
+                            if (choice) { mappingRows[i].sent=choice==2 ? 0 : -1; changed=true; }
+                        } else { mappingRows[i].pressed=0; changed=true; }
+                    }
+                }
+                if (changed && !saveRow(id)) { mappingRows=std::move(oldMaps); combinationRows=std::move(oldCombos); }
+                renderRows(); updateCaptureButtons(); return 0;
+            }
             if (id >= NumpadBase && id < NumpadBase + 6) {
                 cancelCapture();
                 HMENU menu = CreatePopupMenu();
@@ -812,7 +803,7 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
                     auto candidate = settings; int key = CustomNumpadKeys[id - NumpadBase];
                     auto& mappings = candidate.profiles[candidate.selected].mappings;
                     for (auto i = mappings.begin(); i != mappings.end();) { if (i->second == key) i = mappings.erase(i); else ++i; }
-                    commit(std::move(candidate)); refresh();
+                    commit(std::move(candidate)); rowsProfile.clear(); refresh();
                 }
                 return 0;
             }
@@ -820,41 +811,27 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
         }
         case WM_COMMAND: command(LOWORD(w), HIWORD(w)); return 0;
         case UpdateFinished: finishUpdate(); return 0;
-        case WM_NOTIFY: {
-            auto header = reinterpret_cast<NMHDR*>(l);
-            if (header->code == NM_CUSTOMDRAW) {
-                if (header->hwndFrom == mappingList) return themeUI.list(reinterpret_cast<NMLVCUSTOMDRAW*>(l));
-                if (header->hwndFrom == ListView_GetHeader(mappingList)) return themeUI.header(reinterpret_cast<NMCUSTOMDRAW*>(l));
-                if (header->idFrom == ScanCodes) return themeUI.button(reinterpret_cast<NMCUSTOMDRAW*>(l), magickey::ButtonRole::Checkbox, false, settings.scanCodes);
-                return CDRF_DODEFAULT;
+        case WM_VSCROLL: {
+            int id = GetDlgCtrlID(reinterpret_cast<HWND>(l));
+            if (id != MapScroll && id != ComboScroll) break;
+            cancelCapture(); int& offset = id == MapScroll ? mapOffset : comboOffset;
+            int page = id == MapScroll ? 4 : 3;
+            switch (LOWORD(w)) {
+                case SB_LINEUP: --offset; break; case SB_LINEDOWN: ++offset; break;
+                case SB_PAGEUP: offset -= page; break; case SB_PAGEDOWN: offset += page; break;
+                case SB_THUMBTRACK: case SB_THUMBPOSITION: offset = HIWORD(w); break;
             }
-            if (header->idFrom == MappingList && header->code == LVN_GETEMPTYMARKUP) {
-                auto empty = reinterpret_cast<NMLVEMPTYMARKUP*>(l);
-                empty->dwFlags = EMF_CENTERED;
-                wcsncpy_s(empty->szMarkup, std::size(empty->szMarkup), tr(L"No mappings yet. Capture two keys to add one."), _TRUNCATE);
-                return TRUE;
-            }
-            if (header->idFrom == MappingList && header->code == LVN_ITEMCHANGED) {
-                auto change = reinterpret_cast<NMLISTVIEW*>(l);
-                if (!refreshingMappings && (change->uNewState & LVIS_SELECTED)) {
-                    cancelCapture();
-                    int key = int(change->lParam);
-                    editingSource = sourceChoice = key;
-                    const auto& mappings = settings.profiles[settings.selected].mappings;
-                    auto found = mappings.find(key);
-                    if (found != mappings.end()) targetChoice = found->second;
-                    updateCaptureButtons();
-                }
-            }
-            return 0;
+            renderRows(); return 0;
         }
         case CapturedKey: {
             bool current;
             { std::lock_guard<std::mutex> lock(engineMutex); current = unsigned(w) == captureGeneration; if (current) capture.cancel(); }
             if (current && GetForegroundWindow() == window) {
-                if (comboCapture >= 0) {
-                    if (comboCapture == 3) comboDestination = LOWORD(l); else comboSources[comboCapture] = LOWORD(l);
-                    comboCapture = -1; updateCaptureButtons(); return 0;
+                if (rowCapture >= 0) {
+                    int id = rowCapture; rowCapture = -1; auto oldMaps=mappingRows; auto oldCombos=combinationRows;
+                    if (id >= ComboRowBase) { int i=(id-ComboRowBase)/6, f=(id-ComboRowBase)%6; if (f == 3) combinationRows[i].trigger=LOWORD(l); else combinationRows[i].keys[f]=LOWORD(l); }
+                    else { int i=(id-MapRowBase)/3, f=(id-MapRowBase)%3; if (f == 0) mappingRows[i].sent=LOWORD(l); else mappingRows[i].pressed=LOWORD(l); }
+                    if (!saveRow(id)) { mappingRows=std::move(oldMaps); combinationRows=std::move(oldCombos); } renderRows(); updateCaptureButtons(); return 0;
                 }
                 if (numpadEditing >= 0) {
                     int to = CustomNumpadKeys[numpadEditing], from = LOWORD(l);
@@ -864,11 +841,8 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
                     for (auto i = mappings.begin(); i != mappings.end();) { if (i->second == to) i = mappings.erase(i); else ++i; }
                     if (from == to) mappings.erase(from);
                     else candidate.profiles[candidate.selected].mappings[from] = to;
-                    commit(std::move(candidate)); refresh(); return 0;
+                    commit(std::move(candidate)); rowsProfile.clear(); refresh(); return 0;
                 }
-                if (CaptureSlot(HIWORD(l)) == CaptureSlot::Source) sourceChoice = LOWORD(l);
-                else targetChoice = LOWORD(l);
-                updateCaptureButtons();
             }
             return 0;
         }
@@ -1003,7 +977,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW); wc.hIcon = magickey::appIcon(false); wc.hIconSm = magickey::appIcon(true);
     wc.hbrBackground = nullptr;
     RegisterClassExW(&wc);
-    RECT bounds{0, 0, 900, 734};
+    RECT bounds{0, 0, 900, 794};
     DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN;
     AdjustWindowRect(&bounds, style, TRUE);
     window = CreateWindowExW(WS_EX_CONTROLPARENT, ClassName, L"MagicKey", style, CW_USEDEFAULT, CW_USEDEFAULT,
@@ -1018,6 +992,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     } else {
         syncEngine(); refresh();
         ShowWindow(window, show); UpdateWindow(window);
+        beginUpdateCheck(true);
         if (invalidTheme) error(L"The saved theme could not be loaded. Ivory is being used. Your profiles are unchanged.");
     }
     MSG msg;
@@ -1026,7 +1001,6 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     }
     if (hookThread) { WaitForSingleObject(hookThread, 5000); CloseHandle(hookThread); }
     if (hookReady) CloseHandle(hookReady);
-    if (rowImages) ImageList_Destroy(rowImages);
     CloseHandle(single);
     return 0;
 }

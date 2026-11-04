@@ -120,10 +120,11 @@ try {
         if ([ThemeWindow]::TaskbarProperty($hwnd, 3) -cne ($app + ',-101')) { throw 'Taskbar icon not restored' }
         if ([ThemeWindow]::GetDlgItem($hwnd, 300) -eq [IntPtr]::Zero -or [ThemeWindow]::GetDlgItem($hwnd, 305) -eq [IntPtr]::Zero) { throw 'Dedicated numpad editor missing' }
         if ([ThemeWindow]::GetDlgItem($hwnd, 111) -ne [IntPtr]::Zero) { throw 'Windows-key setting still lives in a profile control' }
-        if ([ThemeWindow]::SendMessage([ThemeWindow]::GetDlgItem($hwnd,106),0x1004,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -ne 2) { throw 'Dedicated keypad mappings leaked into general list' }
-        $list = [ThemeWindow]::GetDlgItem($hwnd,106)
-        if ([ThemeWindow]::SendMessage($list,0x104E,[IntPtr]::Zero,[IntPtr]::Zero) -ne [IntPtr]::Zero) { throw 'Native mapping tooltip was not disabled' }
-        if ([ThemeWindow]::GetDlgItem($hwnd,410) -eq [IntPtr]::Zero) { throw 'Combination section missing' }
+        if ([ThemeWindow]::GetDlgItem($hwnd,106) -ne [IntPtr]::Zero) { throw 'Old mapping list still present' }
+        foreach ($id in 10000,10001,10003,10004,20000,20003,20004) {
+            if ([ThemeWindow]::GetDlgItem($hwnd,$id) -eq [IntPtr]::Zero) { throw "Inline mapping field $id missing" }
+        }
+        if ([ThemeWindow]::GetDlgItem($hwnd,10006) -ne [IntPtr]::Zero) { throw 'Keypad mappings leaked into ordinary rows' }
         $toggle = [ThemeWindow]::GetDlgItem($hwnd, 112)
         $activeLabel = New-Object Text.StringBuilder 256
         $null = [ThemeWindow]::GetWindowText($toggle, $activeLabel, 256)
@@ -155,7 +156,7 @@ try {
         if (([ThemeWindow]::GetMenuState($languages, [uint32](2000 + $language), 0) -band 8) -eq 0) { throw 'Language menu selection did not persist' }
         # Exercise hover/leave repainting of a keycap, action button, checkbox
         # and combo before every palette/language screenshot.
-        foreach ($control in 107,109,121,101,300,411,414) {
+        foreach ($control in 10000,120,121,101,300,20000,20003) {
             $item = [ThemeWindow]::GetDlgItem($hwnd,$control)
             $null = [ThemeWindow]::SendMessage($item,0x200,[IntPtr]::Zero,[IntPtr]0x00100010)
             $null = [ThemeWindow]::UpdateWindow($item)
@@ -222,23 +223,34 @@ try {
     $process = Start-MagicKey
     $selection = [ThemeWindow]::SendMessage([ThemeWindow]::GetDlgItem($process.MainWindowHandle, 101), 0x147, [IntPtr]::Zero, [IntPtr]::Zero).ToInt32()
     if ($selection -ne 9) { throw 'Shortcut profile selection did not survive restart' }
-    # Empty profile starts at Add; after saving it becomes Update. Editing the
-    # selected row must replace its destination rather than append another row.
+    # Inline rows save completed edits immediately, without Add/Update.
     $hwnd = $process.MainWindowHandle
-    $button = [ThemeWindow]::GetDlgItem($hwnd,109)
     $caption = New-Object Text.StringBuilder 256
-    $null = [ThemeWindow]::GetWindowText($button,$caption,256)
-    if ($caption.ToString() -cne 'Add') { throw 'Empty profile did not default to Add' }
-    $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]109,[IntPtr]::Zero)
-    $null = [ThemeWindow]::GetWindowText($button,$caption.Clear(),256)
-    if ($caption.ToString() -cne 'Update') { throw 'Existing mapping did not default to Update' }
-    $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]115,[IntPtr]::Zero) # Disabled target.
-    $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]109,[IntPtr]::Zero)
-    if ([ThemeWindow]::SendMessage([ThemeWindow]::GetDlgItem($hwnd,106),0x1004,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -ne 1) { throw 'Update appended a duplicate mapping' }
-    if (![IO.File]::ReadAllText($profile).Contains("65 0")) { throw 'Update did not replace the selected mapping' }
+    function Capture-Key([int]$id, [int]$key, [string]$expected) {
+        $null = [ThemeWindow]::SetForegroundWindow($hwnd)
+        $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]$id,[ThemeWindow]::GetDlgItem($hwnd,$id))
+        foreach ($generation in 0..2048) {
+            $null = [ThemeWindow]::SendMessage($hwnd,0x8003,[IntPtr]$generation,[IntPtr]($key -bor (2 -shl 16)))
+            $null = [ThemeWindow]::GetWindowText([ThemeWindow]::GetDlgItem($hwnd,$id),$caption.Clear(),256)
+            if ($caption.ToString() -ceq $expected) { return }
+        }
+        throw "Capture failed for inline field $id; actual=$caption"
+    }
+    $null = [ThemeWindow]::GetWindowText([ThemeWindow]::GetDlgItem($hwnd,10000),$caption,256)
+    if ($caption.Length -ne 0) { throw 'New mapping row is not blank' }
+    Capture-Key 10000 90 'Z' # Left = key to send.
+    Capture-Key 10001 65 'A' # Right = key to press.
+    if (![IO.File]::ReadAllText($profile).Contains('65 90')) { throw 'Inline mapping did not autosave A -> Z' }
+    Capture-Key 10000 88 'X'
+    if (![IO.File]::ReadAllText($profile).Contains('65 88') -or [IO.File]::ReadAllText($profile).Contains('65 90')) { throw 'Editing output did not replace mapping' }
+    Capture-Key 10001 66 'B'
+    if (![IO.File]::ReadAllText($profile).Contains('66 88') -or [IO.File]::ReadAllText($profile).Contains('65 88')) { throw 'Editing trigger left old mapping behind' }
     $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]120,[IntPtr]::Zero)
-    $null = [ThemeWindow]::GetWindowText($button,$caption.Clear(),256)
-    if ($caption.ToString() -cne 'Add') { throw 'New mapping did not reset to Add' }
+    if ([ThemeWindow]::GetDlgItem($hwnd,10003) -eq [IntPtr]::Zero) { throw 'Add row did not append a second row' }
+    $null = [ThemeWindow]::GetWindowText([ThemeWindow]::GetDlgItem($hwnd,10003),$caption.Clear(),256)
+    if ($caption.Length -ne 0) { throw 'Added row is not blank' }
+    $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]10002,[IntPtr]::Zero)
+    if ([IO.File]::ReadAllText($profile).Contains('66 88')) { throw 'Remove row did not remove mapping' }
     # Windows-key blocking is global across profile changes.
     $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]111,[IntPtr]::Zero)
     $null = [ThemeWindow]::SendMessage($hwnd,0x8005,[IntPtr]::Zero,[IntPtr]::Zero)
@@ -255,30 +267,32 @@ try {
         if ($caption.ToString() -ceq 'T') { break }
     }
     if ($caption.ToString() -cne 'T' -or ![IO.File]::ReadAllText($profile).Contains('84 103')) { throw 'Numpad destination capture did not save' }
-    if ([ThemeWindow]::SendMessage([ThemeWindow]::GetDlgItem($hwnd,106),0x1004,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -ne 0) { throw 'Captured numpad mapping appeared in general table' }
-    # Legacy input chords remain editable. New entries default to output mode.
-    $mode = [ThemeWindow]::GetDlgItem($hwnd,418)
-    if ([ThemeWindow]::SendMessage($mode,0x147,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -ne 1) { throw 'New macro did not default to Together output' }
-    $null = [ThemeWindow]::SendMessage($mode,0x14E,[IntPtr]::Zero,[IntPtr]::Zero)
-    $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr](418 -bor (1 -shl 16)),$mode)
-    # Create A+B -> D, then add the third key through capture and update it.
-    $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]415,[IntPtr]::Zero)
-    if ([ThemeWindow]::SendMessage([ThemeWindow]::GetDlgItem($hwnd,410),0x18B,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -ne 1) { throw 'Two-key combination did not save' }
-    $null = [ThemeWindow]::SetForegroundWindow($hwnd)
-    $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]413,[IntPtr]::Zero)
-    foreach ($generation in 0..100) {
-        $null = [ThemeWindow]::SendMessage($hwnd,0x8003,[IntPtr]$generation,[IntPtr](67 -bor (2 -shl 16)))
-        $null = [ThemeWindow]::GetWindowText([ThemeWindow]::GetDlgItem($hwnd,413),$caption.Clear(),256)
-        if ($caption.ToString() -ceq 'C') { break }
-    }
-    if ($caption.ToString() -cne 'C') { throw 'Third combination key capture failed' }
-    $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]415,[IntPtr]::Zero)
-    if (![IO.File]::ReadAllText($profile).Contains('0 3 65 66 67 68')) { throw 'Three-key combination did not update' }
-    # Convert the selected rule to sequential D -> A,B,C and persist the mode.
+    if ([ThemeWindow]::GetDlgItem($hwnd,10003) -ne [IntPtr]::Zero) { throw 'Keypad mapping leaked into ordinary rows' }
+    # Blank combinations are drafts. A/B and D make a complete Together rule;
+    # changing any key or mode updates that same rule immediately.
+    $null = [ThemeWindow]::GetWindowText([ThemeWindow]::GetDlgItem($hwnd,20002),$caption.Clear(),256)
+    if ($caption.Length -ne 0) { throw 'Optional combination field is not blank' }
+    Capture-Key 20000 65 'A'
+    Capture-Key 20001 66 'B'
+    Capture-Key 20003 68 'D'
+    if (![IO.File]::ReadAllText($profile).Contains('1 2 65 66 68')) { throw 'Two-key Together rule did not autosave' }
+    Capture-Key 20002 67 'C'
+    if (![IO.File]::ReadAllText($profile).Contains('1 3 65 66 67 68')) { throw 'Third key did not update rule' }
+    $mode = [ThemeWindow]::GetDlgItem($hwnd,20004)
     $null = [ThemeWindow]::SendMessage($mode,0x14E,[IntPtr]2,[IntPtr]::Zero)
-    $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr](418 -bor (1 -shl 16)),$mode)
-    $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]415,[IntPtr]::Zero)
-    if (![IO.File]::ReadAllText($profile).Contains('2 3 65 66 67 68')) { throw 'Sequential output mode did not persist' }
+    $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr](20004 -bor (1 -shl 16)),$mode)
+    if (![IO.File]::ReadAllText($profile).Contains('2 3 65 66 67 68')) { throw 'Mode change did not autosave' }
+    $null = [ThemeWindow]::SendMessage($hwnd,0x7B,[ThemeWindow]::GetDlgItem($hwnd,20002),[IntPtr](-1))
+    if (![IO.File]::ReadAllText($profile).Contains('2 2 65 66 68')) { throw 'Clearing optional key did not retain two-key rule' }
+    $null = [ThemeWindow]::GetWindowText([ThemeWindow]::GetDlgItem($hwnd,20002),$caption.Clear(),256)
+    if ($caption.Length -ne 0) { throw 'Cleared third key shows placeholder text' }
+    $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]416,[IntPtr]::Zero)
+    if ([ThemeWindow]::GetDlgItem($hwnd,20006) -eq [IntPtr]::Zero) { throw 'Add combination row did not work' }
+    # More than the visible four mapping rows must remain reachable by scrolling.
+    foreach ($n in 1..5) { $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]120,[IntPtr]::Zero) }
+    if ([ThemeWindow]::GetDlgItem($hwnd,10015) -eq [IntPtr]::Zero) { throw 'New row did not scroll into view' }
+    $null = [ThemeWindow]::SendMessage($hwnd,0x115,[IntPtr]0,[ThemeWindow]::GetDlgItem($hwnd,500))
+    if ([ThemeWindow]::GetDlgItem($hwnd,10003) -eq [IntPtr]::Zero) { throw 'Mapping scrollbar did not scroll back' }
     # Save two independent Quick Chat slots and reopen to check persistence.
     $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]121,[IntPtr]::Zero)
     $chat = [ThemeWindow]::FindWindow('MagicKey.QuickChat','Quick Chat')
