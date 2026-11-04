@@ -41,7 +41,7 @@ Download **MagicKey-windows-x64-portable.zip** from [GitHub Releases](https://gi
 
 A release must first be published by the workflow below before the download links or in-app checks can return an executable. This source tree alone is not a published GitHub release.
 
-The app displays **MagicKey v1.10.2** in its heading. Windows file properties also contain the product name and version, generated from the single version in `CMakeLists.txt`.
+The app displays **MagicKey v1.10.3** in its heading. Windows file properties also contain the product name and version, generated from the single version in `CMakeLists.txt`.
 
 ## Build and publish (maintainers)
 
@@ -54,8 +54,8 @@ To publish a stable release:
 
    ```sh
    git push origin main
-   git tag v1.10.2
-   git push origin v1.10.2
+   git tag v1.10.3
+   git push origin v1.10.3
    ```
 
 3. Open **Actions → Build and release MagicKey**. After compilation, tests, and packaging succeed, the tag run creates a draft release with all four download assets, then publishes it as the latest stable release. A tag that differs from the compiled version fails before publication. Branch and pull-request runs never publish releases.
@@ -73,7 +73,7 @@ If double-clicking an older script seems to do nothing, run it from Command Prom
 
 ## In-app updates
 
-Click **Settings → Check for updates**. MagicKey requests `https://api.github.com/repos/zxiaox/magicKey/releases/latest` in a background worker, compares numeric stable versions (1.10.2 is newer than 1.9.0), and reports whether a newer release exists. The same check runs automatically at startup; current-version and failure results stay quiet for automatic checks. Explicit checks report a missing public release, invalid metadata, connection failure, or GitHub rate limit separately from being up to date.
+Click **Settings → Check for updates**. MagicKey requests `https://api.github.com/repos/zxiaox/magicKey/releases/latest` in a background worker, compares numeric stable versions (1.10.3 is newer than 1.9.0), and reports whether a newer release exists. The same check runs automatically at startup; current-version and failure results stay quiet for automatic checks. Explicit checks report a missing public release, invalid metadata, connection failure, or GitHub rate limit separately from being up to date.
 
 When an update is available, approve **Download and install**. MagicKey downloads only this repository's `MagicKey.exe` release asset over HTTPS, accepts redirects only to GitHub's asset hosts, checks the exact file length and Windows x64 PE header, and verifies SHA-256 against GitHub's asset digest and the attached `MagicKey.exe.sha256` when available. A release must provide a digest or checksum. A checksum checks the asset against release metadata; it is not a publisher code signature or protection against a compromised repository account.
 
@@ -86,7 +86,7 @@ For manual recovery, close MagicKey, rename `MagicKey.exe.backup` to `MagicKey.e
 ## Use
 
 1. Open `MagicKey.exe`. The selected profile is enabled immediately. Use **Pause remapping** or **Ctrl + Alt + F12** if you want to pause it.
-2. In **Key Mapping**, fill the left **Key to Send** field and the right **Key to Press** field. For example, left Q and right A means pressing A sends Q. Click a field and press/release the desired physical key. Complete rows save automatically; editing either field updates that same mapping. **Add row** inserts a blank row; **×** removes it. Right-click an output field to clear it or choose **Disabled**; right-click a trigger to clear it. Incomplete rows remain drafts until completed and are not saved.
+2. In **Key Mapping**, fill the left **Original Key** field and the right **New Key** field. For example, left Q and right A means pressing A sends Q. Click a field and press/release the desired physical key. Complete rows save automatically; editing either field updates that same mapping. **Add row** inserts a blank row; **×** removes it. Right-click an output field to clear it or choose **Disabled**; right-click a trigger to clear it. Incomplete rows remain drafts until completed and are not saved.
 3. To create a profile, type a unique name in **Profile name** and click **New**. The numeric keypad section starts with **Q → Numpad 7**, **W → Numpad 8**, **R → Numpad 4**, and **T → Numpad 5**. Slots 1 and 2 start blank. Edit the field beside a numpad destination to choose the key that sends it. Rename applies to the selected profile; switching profiles applies its saved mappings immediately when enabled.
 4. Use **Settings → Disable Windows keys** to apply Windows-key blocking globally while remapping is enabled.
 5. Switch to the application where you want to use it. If you paused remapping, click **Enable remapping** first. Remapping deliberately bypasses the MagicKey editor so its controls stay usable.

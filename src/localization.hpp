@@ -4,6 +4,9 @@
 namespace mywarkey {
 struct Translation { const wchar_t *en, *zh, *ja, *ko; };
 inline constexpr Translation translations[] = {
+    {L"Original Key", L"原始按键", L"元のキー", L"원래 키"},
+    {L"New Key", L"新按键", L"新しいキー", L"새 키"},
+    {L"Quick Chat Settings", L"快捷聊天设置", L"クイックチャット設定", L"빠른 채팅 설정"},
     {L"Add row", L"添加行", L"行を追加", L"행 추가"},
     {L"Key to Send", L"发送按键", L"送信するキー", L"전송할 키"},
     {L"Keys to Send", L"发送组合按键", L"送信するキー", L"전송할 키 조합"},

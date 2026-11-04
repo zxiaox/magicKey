@@ -1,7 +1,7 @@
-# MagicKey v1.10.2
+# MagicKey v1.10.3
 
-- Moved Quick Chat to the bottom status bar, immediately left of the remapping toggle.
-- Display Ctrl + Alt + F12 on a second line inside both the Pause remapping and Enable remapping button states.
-- Preserve existing mapping behavior, profiles, Quick Chat messages, themes, and languages.
+- Slightly reduced the height of the numeric keypad and standard mapping panels, while retaining four visible mapping rows.
+- Renamed mapping and combination labels to Original Key and New Key, with equals signs replacing arrows. Mapping behavior is unchanged.
+- Renamed Quick Chat to Quick Chat Settings in the bottom bar, Settings menu, and editor title.
 
-Download MagicKey.exe or the portable ZIP. Existing users can use Settings → Check for updates.
+Download MagicKey.exe or the portable ZIP, or use Settings → Check for updates. Existing profiles and messages are preserved.

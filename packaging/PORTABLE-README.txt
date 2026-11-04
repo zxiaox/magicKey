@@ -1,4 +1,4 @@
-MagicKey v1.10.2 - portable keyboard remapper for Windows 10/11 x64
+MagicKey v1.10.3 - portable keyboard remapper for Windows 10/11 x64
 https://github.com/zxiaox/magicKey
 
 Run MagicKey.exe from a writable folder. No installation, Visual Studio, CMake,
@@ -14,7 +14,7 @@ The keypad fields select the input which sends each numpad destination.
 New profiles: Q -> Numpad 7, W -> Numpad 8, R -> Numpad 4, T -> Numpad 5.
 Slots 1 and 2 are blank. Top-row digits and numpad digits are distinct.
 
-Standard mappings: left = Key to Send; right = Key to Press.
+Standard mappings: left = Original Key; right = New Key.
 Click a field, then press and release a physical key. Completed edits save
 immediately. Add row creates a blank draft; x removes a row. Right-click an
 output to clear it or choose Disabled. Right-click a trigger to clear it.

@@ -128,7 +128,7 @@ try {
         if ([ThemeWindow]::GetDlgItem($hwnd,10006) -ne [IntPtr]::Zero) { throw 'Keypad mappings leaked into ordinary rows' }
         $client = New-Object ThemeWindow+Rect
         $null = [ThemeWindow]::GetClientRect($hwnd,[ref]$client)
-        if ($client.Bottom -lt 708) { throw 'Window work-area clipping hides the status bar' }
+        if ($client.Bottom -lt 688) { throw 'Window work-area clipping hides the status bar' }
         $toggle = [ThemeWindow]::GetDlgItem($hwnd, 112)
         $chatBounds = New-Object ThemeWindow+Rect
         $pauseBounds = New-Object ThemeWindow+Rect
@@ -304,7 +304,7 @@ try {
     if ([ThemeWindow]::GetDlgItem($hwnd,10003) -eq [IntPtr]::Zero) { throw 'Mapping scrollbar did not scroll back' }
     # Save two independent Quick Chat slots and reopen to check persistence.
     $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]121,[IntPtr]::Zero)
-    $chat = [ThemeWindow]::FindWindow('MagicKey.QuickChat','Quick Chat')
+    $chat = [ThemeWindow]::FindWindow('MagicKey.QuickChat','Quick Chat Settings')
     if ($chat -eq [IntPtr]::Zero) { throw 'Quick Chat editor missing' }
     $slots = [ThemeWindow]::GetDlgItem($chat,401)
     $edit = [ThemeWindow]::GetDlgItem($chat,402)
@@ -334,7 +334,7 @@ try {
     $process = Start-MagicKey
     $hwnd = $process.MainWindowHandle
     $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]121,[IntPtr]::Zero)
-    $chat = [ThemeWindow]::FindWindow('MagicKey.QuickChat','Quick Chat')
+    $chat = [ThemeWindow]::FindWindow('MagicKey.QuickChat','Quick Chat Settings')
     $edit = [ThemeWindow]::GetDlgItem($chat,402)
     $slots = [ThemeWindow]::GetDlgItem($chat,401)
     if ([ThemeWindow]::SendMessage($slots,0x147,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -ne 9) { throw 'Quick Chat selected slot was not remembered' }

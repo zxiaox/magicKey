@@ -299,7 +299,7 @@ void refreshMenus() {
     AppendMenuW(options, MF_POPUP, UINT_PTR(themes), tr(L"Theme"));
     AppendMenuW(options, MF_STRING | (settings.scanCodes ? MF_CHECKED : 0), ScanCodes, tr(L"Game-compatible input (scan codes)"));
     AppendMenuW(options, MF_STRING | (settings.blockWindows ? MF_CHECKED : 0), BlockWindows, tr(L"Disable Windows keys"));
-    AppendMenuW(options, MF_STRING, QuickChatOpen, tr(L"Quick Chat"));
+    AppendMenuW(options, MF_STRING, QuickChatOpen, tr(L"Quick Chat Settings"));
     AppendMenuW(options, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(options, MF_STRING, CheckUpdates, tr(L"Check for updates"));
     AppendMenuW(options, MF_STRING, NotificationDiagnostics, tr(L"Notification diagnostics"));
@@ -448,19 +448,19 @@ void renderRows() {
     scroll(MapScroll,mapOffset,int(mappingRows.size()),4);
     scroll(ComboScroll,comboOffset,int(combinationRows.size()),2);
     for (int i = mapOffset; i < std::min(int(mappingRows.size()),mapOffset+4); ++i) {
-        const auto& r = mappingRows[i]; int y=270+(i-mapOffset)*44, id=MapRowBase+i*3;
+        const auto& r = mappingRows[i]; int y=270+(i-mapOffset)*40, id=MapRowBase+i*3;
         add(L"BUTTON",r.sent < 0 ? L"" : keyName(r.sent),WS_TABSTOP,id,360,y,180,36);
-        add(L"STATIC",L"\x2190",0,0,542,y+6,24,26);
+        add(L"STATIC",L"=",0,0,542,y+6,24,26);
         add(L"BUTTON",r.pressed ? keyName(r.pressed) : L"",WS_TABSTOP,id+1,568,y,180,36);
         add(L"BUTTON",L"\x00d7",WS_TABSTOP,id+2,770,y,64,36);
     }
     for (int i = comboOffset; i < std::min(int(combinationRows.size()),comboOffset+2); ++i) {
-        const auto& r = combinationRows[i]; int y=532+(i-comboOffset)*44, id=ComboRowBase+i*6;
+        const auto& r = combinationRows[i]; int y=512+(i-comboOffset)*44, id=ComboRowBase+i*6;
         for (int f=0; f<3; ++f) {
             add(L"BUTTON",r.keys[f] ? keyName(r.keys[f]) : L"",WS_TABSTOP,id+f,44+f*116,y,96,36);
-            if (f<2) add(L"STATIC",r.mode == CombinationMode::Sequence ? L"\x2192" : L"+",0,0,140+f*116,y+6,20,26);
+            if (f<2) add(L"STATIC",r.mode == CombinationMode::Sequence ? L"=" : L"+",0,0,140+f*116,y+6,20,26);
         }
-        add(L"STATIC",r.mode == CombinationMode::InputChord ? L"\x2192" : L"\x2190",0,0,380,y+6,28,26);
+        add(L"STATIC",L"=",0,0,380,y+6,28,26);
         add(L"BUTTON",r.trigger >= 0 ? keyName(r.trigger) : L"",WS_TABSTOP,id+3,410,y,134,36);
         HWND mode = add(WC_COMBOBOXW,L"",CBS_DROPDOWNLIST | WS_TABSTOP,id+4,570,y,184,200);
         for (auto name : {L"Input chord",L"Together",L"Sequence"}) SendMessageW(mode,CB_ADDSTRING,0,LPARAM(tr(name)));
@@ -528,20 +528,20 @@ void makeInterface() {
     }
     control(L"STATIC",L"Key Mapping",0,SectionMappings,360,206,270,22);
     control(L"BUTTON",L"Add row",WS_TABSTOP,NewMapping,740,200,114,30);
-    control(L"STATIC",L"Key to Send",0,0,360,242,190,22);
-    control(L"STATIC",L"Key to Press",0,0,568,242,190,22);
-    control(L"SCROLLBAR",L"",SBS_VERT,MapScroll,854,270,16,176);
-    control(L"STATIC",L"Multi-Key Combinations",0,0,44,474,390,22);
-    control(L"BUTTON",L"Add row",WS_TABSTOP,416,740,466,114,30);
-    control(L"STATIC",L"Keys to Send",0,0,44,506,330,20);
-    control(L"STATIC",L"Key to Press",0,0,410,506,130,20);
-    control(L"STATIC",L"Mode",0,0,570,506,200,20);
-    control(L"SCROLLBAR",L"",SBS_VERT,ComboScroll,854,532,16,88);
-    control(L"BUTTON",L"Quick Chat",WS_TABSTOP,QuickChatOpen,530,668,134,38);
-    control(L"STATIC",L"Click to capture. Right-click to clear. Changes save automatically.",0,0,44,630,810,20);
-    statusLabel = control(L"STATIC",L"",0,0,58,676,320,22);
+    control(L"STATIC",L"Original Key",0,0,360,242,190,22);
+    control(L"STATIC",L"New Key",0,0,568,242,190,22);
+    control(L"SCROLLBAR",L"",SBS_VERT,MapScroll,854,270,16,156);
+    control(L"STATIC",L"Multi-Key Combinations",0,0,44,454,390,22);
+    control(L"BUTTON",L"Add row",WS_TABSTOP,416,740,446,114,30);
+    control(L"STATIC",L"Original Key",0,0,44,486,330,20);
+    control(L"STATIC",L"New Key",0,0,410,486,130,20);
+    control(L"STATIC",L"Mode",0,0,570,486,200,20);
+    control(L"SCROLLBAR",L"",SBS_VERT,ComboScroll,854,512,16,88);
+    control(L"BUTTON",L"Quick Chat Settings",WS_TABSTOP,QuickChatOpen,482,648,182,38);
+    control(L"STATIC",L"Click to capture. Right-click to clear. Changes save automatically.",0,0,44,610,810,20);
+    statusLabel = control(L"STATIC",L"",0,0,58,656,320,22);
     SendMessageW(statusLabel,WM_SETFONT,WPARAM(font),TRUE);
-    toggleButton = control(L"BUTTON",L"",WS_TABSTOP,Toggle,676,668,178,38);
+    toggleButton = control(L"BUTTON",L"",WS_TABSTOP,Toggle,676,648,178,38);
     SendMessageW(profileBox,CB_SETITEMHEIGHT,WPARAM(-1),28);
     themeUI.apply(window,nullptr,themeUI.theme()); refresh();
 }
@@ -642,7 +642,7 @@ void openQuickChat() {
     wc.hIcon = magickey::appIcon(false); wc.hIconSm = magickey::appIcon(true); RegisterClassExW(&wc);
     RECT bounds{0,0,600,294}; DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_CLIPCHILDREN;
     AdjustWindowRect(&bounds,style,FALSE);
-    quickChatWindow = CreateWindowExW(WS_EX_CONTROLPARENT,wc.lpszClassName,tr(L"Quick Chat"),style,CW_USEDEFAULT,CW_USEDEFAULT,bounds.right-bounds.left,bounds.bottom-bounds.top,window,nullptr,wc.hInstance,nullptr);
+    quickChatWindow = CreateWindowExW(WS_EX_CONTROLPARENT,wc.lpszClassName,tr(L"Quick Chat Settings"),style,CW_USEDEFAULT,CW_USEDEFAULT,bounds.right-bounds.left,bounds.bottom-bounds.top,window,nullptr,wc.hInstance,nullptr);
     ShowWindow(quickChatWindow,SW_SHOW); SetForegroundWindow(quickChatWindow);
 }
 void command(int id, int notification) {
@@ -979,7 +979,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW); wc.hIcon = magickey::appIcon(false); wc.hIconSm = magickey::appIcon(true);
     wc.hbrBackground = nullptr;
     RegisterClassExW(&wc);
-    RECT bounds{0, 0, 900, 714};
+    RECT bounds{0, 0, 900, 694};
     DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN;
     AdjustWindowRect(&bounds, style, TRUE);
     window = CreateWindowExW(WS_EX_CONTROLPARENT, ClassName, L"MagicKey", style, CW_USEDEFAULT, CW_USEDEFAULT,
