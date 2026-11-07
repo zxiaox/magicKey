@@ -1,4 +1,4 @@
-MagicKey v1.11.0 - portable keyboard remapper for Windows 10/11 x64
+MagicKey v1.12.0 - portable keyboard remapper for Windows 10/11 x64
 https://github.com/zxiaox/magicKey
 
 Run MagicKey.exe from a writable folder. No installation, Visual Studio, CMake,
@@ -21,11 +21,11 @@ output to clear it or choose Disabled. Right-click a trigger to clear it.
 Incomplete drafts are not saved and are discarded on profile switch or exit.
 
 Combinations: the trigger comes first, followed by outputs: X = A+B+C.
-Three output slots appear by default. Use + to add slots, up to five. Leave unused
+Three output slots appear by default. Use + to keep adding slots without a fixed cap. Use the row arrows to navigate. Leave unused
 slots blank; right-click a slot to clear it. Blank positions and slot count are saved.
 Together sends the outputs simultaneously; Sequence sends them in order.
 Sequential Input Speed sets a global nominal onset interval of 80-180 ms (default
-80 ms). Keys are held for 60 ms, with a 20-120 ms gap. Actual timing depends on
+80 ms). Keys are held for 60 ms, with a 20-120 ms gap; 100 ms means a 60 ms hold and a 40 ms gap. Actual timing depends on
 Windows scheduling. The slider does not affect Together mode.
 Legacy Input chord rules retain the reverse behavior: right-hand physical keys
 trigger the first field's output when pressed within 150 ms.
@@ -41,7 +41,7 @@ The previous executable is kept as MagicKey.exe.backup.
 
 Profiles and language use mywarkey.profiles beside the executable (the legacy
 filename is intentional). Appearance is saved separately in MagicKey.theme.
-Existing settings versions 1-5 load; saving writes version 6. Keep a backup if
+Existing settings versions 1-6 load; saving writes version 7. Keep a backup if
 downgrading, since older executables cannot read the current format.
 Disable Windows keys is global under Settings.
 

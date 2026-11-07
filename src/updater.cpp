@@ -1,3 +1,4 @@
+#include "window_position.hpp"
 #include "updater.hpp"
 #include "localization.hpp"
 #include <winhttp.h>
@@ -216,7 +217,7 @@ int applyUpdate(int argc, wchar_t** argv) {
         }
         return 0;
     } catch (...) {
-        MessageBoxW(nullptr, mywarkey::translate(L"The update could not be installed. Your profiles are unchanged. The previous executable or its .backup file can be used to recover.", language),
+        magickey::centeredMessageBox(nullptr, mywarkey::translate(L"The update could not be installed. Your profiles are unchanged. The previous executable or its .backup file can be used to recover.", language),
             L"MagicKey", MB_OK | MB_ICONWARNING);
         if (originalExited && !target.empty()) { try { startProcess(target); } catch (...) {} }
         return 1;

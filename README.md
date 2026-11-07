@@ -41,7 +41,7 @@ Download **MagicKey-windows-x64-portable.zip** from [GitHub Releases](https://gi
 
 A release must first be published by the workflow below before the download links or in-app checks can return an executable. This source tree alone is not a published GitHub release.
 
-The app displays **MagicKey v1.11.0** in its heading. Windows file properties also contain the product name and version, generated from the single version in `CMakeLists.txt`.
+The app displays **MagicKey v1.12.0** in its heading. Windows file properties also contain the product name and version, generated from the single version in `CMakeLists.txt`.
 
 ## Build and publish (maintainers)
 
@@ -54,8 +54,8 @@ To publish a stable release:
 
    ```sh
    git push origin main
-   git tag v1.11.0
-   git push origin v1.11.0
+   git tag v1.12.0
+   git push origin v1.12.0
    ```
 
 3. Open **Actions → Build and release MagicKey**. After compilation, tests, and packaging succeed, the tag run creates a draft release with all four download assets, then publishes it as the latest stable release. A tag that differs from the compiled version fails before publication. Branch and pull-request runs never publish releases.
@@ -73,7 +73,7 @@ If double-clicking an older script seems to do nothing, run it from Command Prom
 
 ## In-app updates
 
-Click **Settings → Check for updates**. MagicKey requests `https://api.github.com/repos/zxiaox/magicKey/releases/latest` in a background worker, compares numeric stable versions (1.11.0 is newer than 1.9.0), and reports whether a newer release exists. The same check runs automatically at startup; current-version and failure results stay quiet for automatic checks. Explicit checks report a missing public release, invalid metadata, connection failure, or GitHub rate limit separately from being up to date.
+Click **Settings → Check for updates**. MagicKey requests `https://api.github.com/repos/zxiaox/magicKey/releases/latest` in a background worker, compares numeric stable versions (1.12.0 is newer than 1.9.0), and reports whether a newer release exists. The same check runs automatically at startup; current-version and failure results stay quiet for automatic checks. Explicit checks report a missing public release, invalid metadata, connection failure, or GitHub rate limit separately from being up to date.
 
 When an update is available, approve **Download and install**. MagicKey downloads only this repository's `MagicKey.exe` release asset over HTTPS, accepts redirects only to GitHub's asset hosts, checks the exact file length and Windows x64 PE header, and verifies SHA-256 against GitHub's asset digest and the attached `MagicKey.exe.sha256` when available. A release must provide a digest or checksum. A checksum checks the asset against release metadata; it is not a publisher code signature or protection against a compromised repository account.
 
@@ -107,9 +107,9 @@ Number labels distinguish **Top row 7** from **Numpad 7**, and likewise for ever
 3. Replace your previous `MagicKey.exe` with `build-windows\Release\MagicKey.exe`, leaving your profile file beside it. If you run the executable directly from the build folder, copy your profile file there too.
 4. Choose your language in **Settings → Language** and leave **Game-compatible input (scan codes)** checked when testing Warcraft III.
 
-The new version reads version-1 and version-2 profile files. An untouched legacy **Default** profile containing exactly A → Q and W → Numpad 7 (version 1), or top-row 7 → Q and 8 → W, is updated to the current default mappings. Other profiles, including a customized Default profile, are preserved. Each new profile uses Q/W/R/T → Numpad 7/8/4/5 in its dedicated keypad area. Existing empty profiles stay empty; the defaults are only applied on creation. Saving writes settings version 6.
+The new version reads version-1 and version-2 profile files. An untouched legacy **Default** profile containing exactly A → Q and W → Numpad 7 (version 1), or top-row 7 → Q and 8 → W, is updated to the current default mappings. Other profiles, including a customized Default profile, are preserved. Each new profile uses Q/W/R/T → Numpad 7/8/4/5 in its dedicated keypad area. Existing empty profiles stay empty; the defaults are only applied on creation. Saving writes settings version 7.
 
-The next settings change saves the version-6 format with global Windows-key blocking, Quick Chat entries, and combination modes; older executables cannot read that format. Keep your backup if you need to downgrade.
+The next settings change saves the version-7 format with global Windows-key blocking, Quick Chat entries, and combination modes; older executables cannot read that format. Keep your backup if you need to downgrade.
 
 ## Warcraft III: typing works but abilities do not
 
@@ -165,9 +165,9 @@ Below the profiles, the first mapping row has **Custom Numeric Keypad** on the l
 
 All fields capture physical keys, distinguishing top-row digits from the numeric keypad. A blank field means unconfigured, with no placeholder. Keypad slots 7/8/4/5 default to input Q/W/R/T respectively; slots 1/2 remain blank. The obsolete three-mapping default is not added separately.
 
-For a combination, put the trigger in the first field and two to five output keys after the equals sign: **X = A+B+C** makes X send A/B/C. New rows provide three output slots. Use the row's **+** button to add a fourth or fifth slot; the button disappears at five. Unused slots stay blank and are skipped when sending. Right-click any key field to clear it; blank positions and the visible slot count survive saving and reopening. Every completed edit saves immediately, including mode changes. **Add row** creates a blank draft and **×** removes a row. Clearing a required field deactivates the saved rule until the row is complete again. Incomplete drafts are discarded when switching profiles or closing the app. Duplicate triggers and invalid combinations are rejected without replacing saved data.
+For a combination, put the trigger in the first field and two or more output keys after the equals sign: **X = A+B+C** makes X send A/B/C. New rows provide three output slots. Use the row's **+** button to keep adding slots; there is no fixed slot-count cap. Long rows show four slots at a time; use **‹ / ›** to navigate. Adding a slot automatically shows the new blank slot. Unused slots stay blank and are skipped when sending. Right-click any key field to clear it; blank positions and the visible slot count survive saving and reopening. Every completed edit saves immediately, including mode changes. **Add row** creates a blank draft and **×** removes a row. Clearing a required field deactivates the saved rule until the row is complete again. Incomplete drafts are discarded when switching profiles or closing the app. Duplicate triggers and invalid combinations are rejected without replacing saved data.
 
-**Sequential Input Speed** is a global slider from **80 to 180 ms** between the starts of successive output presses, with 80 ms as the default. Each key is held for 60 ms, followed by a 20–120 ms gap. The current interval is shown beside the slider and saves when dragging finishes; keyboard adjustments save immediately. Windows scheduling can round or delay actual timing, so these are nominal intervals. Together mode does not use this slider.
+**Sequential Input Speed** is a global slider from **80 to 180 ms** between the starts of successive output presses, with 80 ms as the default. Each key is held for 60 ms, followed by a 20–120 ms gap. The slider changes only the gap: at 100 ms, the hold remains 60 ms and the gap becomes 40 ms. The current interval is shown beside the slider and saves when dragging finishes; keyboard adjustments save immediately. Windows scheduling can round or delay actual timing, so these are nominal intervals. Together mode does not use this slider.
 
 **Together** holds the outputs together for 60 ms, pressing modifiers first and releasing in reverse order. **Sequence** taps them in field order using the speed slider; repeated keys are allowed. Releasing the trigger does not truncate the macro. Only one macro runs at a time; repeats/additional macro presses during it are consumed. Pause, profile/focus changes, and exit cancel it and release generated keys. Generated outputs bypass remapping.
 
@@ -177,4 +177,6 @@ Legacy **Input chord** rules remain available and preserve their opposite direct
 
 At startup MagicKey automatically checks for a newer release in the background. Current-version and network-failure results stay quiet; an available update prompts before downloading/installing. **Settings → Check for updates** remains available for an explicit check and displays its result. Update checks do not change profiles or pause remapping.
 
-Settings version 6 adds the global sequence interval and three-to-five-slot layouts, including blank positions. Versions 1–5 still load; version 4 chords retain Input chord mode, and version 5 output macros keep their modes with the default 80 ms interval. Older executables cannot read version 6. Keep a backup when downgrading.
+Settings version 7 adds the global sequence interval and variable-length slot layouts, including blank positions. Versions 1–6 still load; version 4 chords retain Input chord mode, and version 5 output macros keep their modes with the default 80 ms interval. Older executables cannot read version 7. Keep a backup when downgrading.
+
+Quick Chat Settings and message dialogs are centered over the main app window and kept within the monitor work area. Dialogs shown before the main window exists, or after it closes, are centered on the monitor. Context menus stay at the pointer.

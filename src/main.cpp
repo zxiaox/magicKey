@@ -14,6 +14,7 @@
 #include "updater.hpp"
 #include "theme_ui.hpp"
 #include "app_identity.hpp"
+#include "window_position.hpp"
 
 using namespace mywarkey;
 constexpr UINT ToggleMessage = WM_APP + 1, InputError = WM_APP + 2, CapturedKey = WM_APP + 3, UpdateFinished = WM_APP + 4, ProfileSwitch = WM_APP + 5, QuickChatSend = WM_APP + 6;
@@ -21,9 +22,9 @@ enum ControlId { ProfileBox = 101, NewProfile, RenameProfile, DeleteProfile, Pro
     MappingList, SourceBox, TargetBox, AddMapping, RemoveMapping, BlockWindows, Toggle, LanguageBox, ScanCodes, DisableTarget, CheckUpdates, ThemeBox, SectionProfile, SectionMappings, NewMapping, QuickChatOpen };
 constexpr int NumpadBase = 300;
 constexpr int MapRowBase = 10000, ComboRowBase = 20000, MapScroll = 500, ComboScroll = 501, SequenceSpeed = 502, SequenceValue = 503;
-constexpr int ComboStride = 9;
+constexpr int ComboStride = 11;
 struct MappingRow { int sent = -1, pressed = 0, original = 0; };
-struct ComboRow { std::array<int,5> keys{}; int slots = 3; int trigger = -1, original = -1; CombinationMode mode = CombinationMode::Together; };
+struct ComboRow { std::vector<int> keys = std::vector<int>(3,0); int keyOffset = 0; int trigger = -1, original = -1; CombinationMode mode = CombinationMode::Together; };
 std::vector<MappingRow> mappingRows;
 std::vector<ComboRow> combinationRows;
 std::vector<HWND> rowControls;
@@ -91,7 +92,7 @@ std::string utf8(const std::wstring& text) {
     WideCharToMultiByte(CP_UTF8, 0, text.data(), int(text.size()), out.data(), n, nullptr, nullptr);
     return out;
 }
-void error(const std::wstring& message) { MessageBoxW(window, tr(message.c_str()), L"MagicKey", MB_OK | MB_ICONWARNING); }
+void error(const std::wstring& message) { magickey::centeredMessageBox(window, tr(message.c_str()), L"MagicKey", MB_OK | MB_ICONWARNING); }
 
 struct Key { int vk; std::wstring label; };
 std::vector<Key> keys;
@@ -370,12 +371,12 @@ void finishUpdate() {
     }
     switch (result.outcome) {
         case Outcome::Current:
-            if (!silentUpdateCheck) MessageBoxW(window, tr(L"You are using the latest version of MagicKey."), L"MagicKey", MB_OK | MB_ICONINFORMATION);
+            if (!silentUpdateCheck) magickey::centeredMessageBox(window, tr(L"You are using the latest version of MagicKey."), L"MagicKey", MB_OK | MB_ICONINFORMATION);
             break;
         case Outcome::Available: {
             auto prompt = std::wstring(tr(L"A new version is available: ")) + wide(result.release.tag) +
                 tr(L"\n\nDownload and install it now? MagicKey will restart after downloading. Your profiles and language settings will be kept.");
-            if (MessageBoxW(window, prompt.c_str(), tr(L"MagicKey update"), MB_YESNO | MB_ICONQUESTION) == IDYES) {
+            if (magickey::centeredMessageBox(window, prompt.c_str(), tr(L"MagicKey update"), MB_YESNO | MB_ICONQUESTION) == IDYES) {
                 downloadingUpdate = true;
                 try { updateClient.download(window, UpdateFinished, std::move(result.release)); }
                 catch (...) { error(failureMessage(Failure::Network)); }
@@ -412,7 +413,7 @@ void refresh() {
         for (int i = 0; i < int(p.combinations.size()); ++i) {
             const auto& c = p.combinations[i];
             ComboRow row; auto fields = c.fields.empty() ? c.keys : c.fields;
-            row.slots = std::max(3,int(fields.size())); std::copy(fields.begin(),fields.end(),row.keys.begin());
+            row.keys=fields; row.keys.resize(std::max(std::size_t(3),fields.size()),0);
             row.trigger=c.target; row.original=i; row.mode=c.mode; combinationRows.push_back(row);
         }
         if (mappingRows.empty()) mappingRows.push_back({});
@@ -479,11 +480,18 @@ void renderRows() {
         const auto& r = combinationRows[i]; int y=484+shift+(i-comboOffset)*44, id=ComboRowBase+i*ComboStride;
         add(L"BUTTON",r.trigger >= 0 ? keyName(r.trigger) : L"",WS_TABSTOP,id+5,44,y,96,36);
         add(L"STATIC",L"=",0,0,144,y+6,18,26);
-        for (int f=0; f<r.slots; ++f) {
-            add(L"BUTTON",r.keys[f] ? keyName(r.keys[f]) : L"",WS_TABSTOP,id+f,164+f*92,y,78,36);
-            if (f<r.slots-1) add(L"STATIC",L"+",0,0,242+f*92,y+6,14,26);
+        const int visible = std::min(4,int(r.keys.size())-r.keyOffset);
+        for (int f=0; f<visible; ++f) {
+            int key=r.keys[r.keyOffset+f];
+            add(L"BUTTON",key ? keyName(key) : L"",WS_TABSTOP,id+f,192+f*92,y,78,36);
+            if (f<visible-1) add(L"STATIC",L"+",0,0,270+f*92,y+6,14,26);
         }
-        if (r.slots < 5) add(L"BUTTON",L"+",WS_TABSTOP,id+7,164+r.slots*92-6,y,28,36);
+        if (r.keys.size()>4) {
+            HWND previous=add(L"BUTTON",L"‹",WS_TABSTOP,id+9,164,y,24,36);
+            HWND next=add(L"BUTTON",L"›",WS_TABSTOP,id+10,558,y,24,36);
+            EnableWindow(previous,r.keyOffset>0); EnableWindow(next,r.keyOffset+4<int(r.keys.size()));
+        }
+        add(L"BUTTON",L"+",WS_TABSTOP,id+7,594,y,36,36);
         HWND mode = add(WC_COMBOBOXW,L"",CBS_DROPDOWNLIST | WS_TABSTOP,id+6,660,y,140,200);
         for (auto name : {L"Input chord",L"Together",L"Sequence"}) SendMessageW(mode,CB_ADDSTRING,0,LPARAM(tr(name)));
         SendMessageW(mode,CB_SETITEMHEIGHT,WPARAM(-1),28); SendMessageW(mode,CB_SETCURSEL,int(r.mode),0);
@@ -524,7 +532,7 @@ bool saveRow(int id) {
             for (int i=0; i<int(list.size()); ++i) if (i != row.original &&
                 (row.mode == CombinationMode::InputChord ? list[i].mode == row.mode && list[i].keys == keys : list[i].mode != CombinationMode::InputChord && list[i].target == row.trigger))
                 throw std::runtime_error("That combination already exists.");
-            Combination entry{keys,row.trigger,row.mode,std::vector<int>(row.keys.begin(),row.keys.begin()+row.slots)};
+            Combination entry{keys,row.trigger,row.mode,row.keys};
             int index = row.original < 0 ? int(list.size()) : row.original;
             if (row.original < 0) profile.combinations.push_back(entry); else profile.combinations[index]=entry;
             if (!commit(std::move(candidate))) return false; row.original=index;
@@ -553,7 +561,7 @@ void makeInterface() {
     control(L"STATIC",L"Original Key",0,0,360,242,190,22);
     control(L"STATIC",L"New Key",0,0,568,242,190,22);
     control(L"SCROLLBAR",L"",SBS_VERT,MapScroll,854,270,16,156);
-    control(L"STATIC",L"Multi-Key Combinations",0,0,44,454,390,22);
+    control(L"STATIC",L"Multi-Key Combinations (click + to add keys)",0,0,44,454,680,22);
     control(L"BUTTON",L"Add row",WS_TABSTOP,416,740,446,114,30);
     control(L"SCROLLBAR",L"",SBS_VERT,ComboScroll,854,484,16,88);
     control(L"BUTTON",L"Quick Chat Settings",WS_TABSTOP,QuickChatOpen,482,648,182,38);
@@ -664,18 +672,19 @@ LRESULT CALLBACK quickChatProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
     return DefWindowProcW(hwnd,message,w,l);
 }
 void openQuickChat() {
-    if (quickChatWindow) { ShowWindow(quickChatWindow,SW_RESTORE); SetForegroundWindow(quickChatWindow); return; }
+    if (quickChatWindow) { magickey::centerWindow(quickChatWindow,window); ShowWindow(quickChatWindow,SW_RESTORE); SetForegroundWindow(quickChatWindow); return; }
     WNDCLASSEXW wc{}; wc.cbSize = sizeof(wc); wc.lpfnWndProc = quickChatProc; wc.hInstance = GetModuleHandleW(nullptr);
     wc.lpszClassName = L"MagicKey.QuickChat"; wc.hCursor = LoadCursorW(nullptr,IDC_ARROW);
     wc.hIcon = magickey::appIcon(false); wc.hIconSm = magickey::appIcon(true); RegisterClassExW(&wc);
     RECT bounds{0,0,600,294}; DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_CLIPCHILDREN;
     AdjustWindowRect(&bounds,style,FALSE);
     quickChatWindow = CreateWindowExW(WS_EX_CONTROLPARENT,wc.lpszClassName,tr(L"Quick Chat Settings"),style,CW_USEDEFAULT,CW_USEDEFAULT,bounds.right-bounds.left,bounds.bottom-bounds.top,window,nullptr,wc.hInstance,nullptr);
+    magickey::centerWindow(quickChatWindow,window);
     ShowWindow(quickChatWindow,SW_SHOW); SetForegroundWindow(quickChatWindow);
 }
 void command(int id, int notification) {
     if (buildingRows) return;
-    if (id >= MapRowBase && id < ComboRowBase + 900) {
+    if (id >= MapRowBase && id < ComboRowBase + 1100) {
         bool combo = id >= ComboRowBase; int field = (id-(combo ? ComboRowBase : MapRowBase)) % (combo ? ComboStride : 3);
         int index = (id-(combo ? ComboRowBase : MapRowBase)) / (combo ? ComboStride : 3);
         if (combo ? index >= int(combinationRows.size()) : index >= int(mappingRows.size())) return;
@@ -686,7 +695,14 @@ void command(int id, int notification) {
         if (notification != BN_CLICKED) return;
         if (combo && field == 7) {
             cancelCapture(); auto old = combinationRows[index];
-            if (combinationRows[index].slots < 5) { ++combinationRows[index].slots; if (!saveRow(id)) combinationRows[index]=old; }
+            auto& row=combinationRows[index];
+            try { row.keys.push_back(0); row.keyOffset=std::max(0,int(row.keys.size())-4); if (!saveRow(id)) row=old; }
+            catch (const std::exception& e) { row=old; error(wide(e.what())); }
+            renderRows(); return;
+        }
+        if (combo && (field == 9 || field == 10)) {
+            cancelCapture(); auto& row=combinationRows[index];
+            row.keyOffset=std::clamp(row.keyOffset+(field==9 ? -4 : 4),0,std::max(0,int(row.keys.size())-4));
             renderRows(); return;
         }
         if (field == (combo ? 8 : 2)) {
@@ -722,7 +738,7 @@ void command(int id, int notification) {
         renderRows(); return;
     }
     if (id == QuickChatOpen) { openQuickChat(); return; }
-    if (id == NotificationDiagnostics) { MessageBoxW(window, gameNotifications.diagnostics().c_str(), tr(L"Notification diagnostics"), MB_OK | MB_ICONINFORMATION); return; }
+    if (id == NotificationDiagnostics) { magickey::centeredMessageBox(window, gameNotifications.diagnostics().c_str(), tr(L"Notification diagnostics"), MB_OK | MB_ICONINFORMATION); return; }
     if (id == CheckUpdates) { beginUpdateCheck(); return; }
     auto candidate = settings;
     auto& p = candidate.profiles[candidate.selected];
@@ -751,7 +767,7 @@ void command(int id, int notification) {
         else { candidate.profiles.push_back(newProfile(name)); candidate.selected = candidate.profiles.size() - 1; }
     } else if (id == DeleteProfile) {
         if (candidate.profiles.size() == 1) return;
-        if (MessageBoxW(window, tr(L"Delete this profile and its mappings?"), tr(L"Delete profile"), MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+        if (magickey::centeredMessageBox(window, tr(L"Delete this profile and its mappings?"), tr(L"Delete profile"), MB_YESNO | MB_ICONQUESTION) != IDYES) return;
         candidate.profiles.erase(candidate.profiles.begin() + candidate.selected);
         candidate.selected = std::min(candidate.selected, candidate.profiles.size() - 1);
     } else if (id == BlockWindows) {
@@ -796,7 +812,7 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
                 if (item->CtlID == Toggle || item->CtlID == AddMapping) role = magickey::ButtonRole::Primary;
                 if (item->CtlID == ScanCodes) role = magickey::ButtonRole::Checkbox;
                 bool dynamicKey = (item->CtlID >= MapRowBase && item->CtlID < ComboRowBase && (item->CtlID-MapRowBase)%3 < 2) ||
-                    (item->CtlID >= ComboRowBase && (item->CtlID-ComboRowBase)%ComboStride < 6);
+                    (item->CtlID >= ComboRowBase && ((item->CtlID-ComboRowBase)%ComboStride < 4 || (item->CtlID-ComboRowBase)%ComboStride == 5));
                 if (dynamicKey || (item->CtlID >= NumpadBase && item->CtlID < NumpadBase+6)) role = magickey::ButtonRole::Key;
                 bool listening = rowCapture == int(item->CtlID) || numpadEditing >= 0 && item->CtlID == NumpadBase+numpadEditing;
                 themeUI.ownerButton(item, role, listening, settings.scanCodes); return TRUE;
@@ -805,12 +821,12 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
         }
         case WM_CONTEXTMENU: {
             int id = GetDlgCtrlID(reinterpret_cast<HWND>(w));
-            if (id >= MapRowBase && id < ComboRowBase+900) {
+            if (id >= MapRowBase && id < ComboRowBase+1100) {
                 cancelCapture(); auto oldMaps=mappingRows; auto oldCombos=combinationRows;
                 bool changed=false;
                 if (id >= ComboRowBase) {
                     int i=(id-ComboRowBase)/ComboStride, field=(id-ComboRowBase)%ComboStride;
-                    if (i < int(combinationRows.size()) && field < 6) { if (field<5) combinationRows[i].keys[field]=0; else combinationRows[i].trigger=-1; changed=true; }
+                    if (i < int(combinationRows.size()) && (field < 4 || field == 5)) { if (field<4) combinationRows[i].keys[combinationRows[i].keyOffset+field]=0; else combinationRows[i].trigger=-1; changed=true; }
                 } else {
                     int i=(id-MapRowBase)/3, field=(id-MapRowBase)%3;
                     if (i < int(mappingRows.size()) && field < 2) {
@@ -872,7 +888,7 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
             if (current && GetForegroundWindow() == window) {
                 if (rowCapture >= 0) {
                     int id = rowCapture; rowCapture = -1; auto oldMaps=mappingRows; auto oldCombos=combinationRows;
-                    if (id >= ComboRowBase) { int i=(id-ComboRowBase)/ComboStride, f=(id-ComboRowBase)%ComboStride; if (f == 5) combinationRows[i].trigger=LOWORD(l); else combinationRows[i].keys[f]=LOWORD(l); }
+                    if (id >= ComboRowBase) { int i=(id-ComboRowBase)/ComboStride, f=(id-ComboRowBase)%ComboStride; if (f == 5) combinationRows[i].trigger=LOWORD(l); else combinationRows[i].keys[combinationRows[i].keyOffset+f]=LOWORD(l); }
                     else { int i=(id-MapRowBase)/3, f=(id-MapRowBase)%3; if (f == 0) mappingRows[i].sent=LOWORD(l); else mappingRows[i].pressed=LOWORD(l); }
                     if (!saveRow(id)) { mappingRows=std::move(oldMaps); combinationRows=std::move(oldCombos); } renderRows(); updateCaptureButtons(); return 0;
                 }
@@ -997,7 +1013,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
             settings = std::move(loaded);
         } catch (const std::exception& e) {
             // Preserve the user's original; never silently overwrite damaged profiles.
-            MessageBoxW(nullptr, (std::wstring(tr(L"Cannot load mywarkey.profiles: ")) + tr(wide(e.what()).c_str()) +
+            magickey::centeredMessageBox(nullptr, (std::wstring(tr(L"Cannot load mywarkey.profiles: ")) + tr(wide(e.what()).c_str()) +
                 tr(L"\n\nThe file has not been changed. Restore it from a backup or rename it to start fresh.")).c_str(),
                 L"MagicKey", MB_OK | MB_ICONERROR);
             CloseHandle(single); return 1;

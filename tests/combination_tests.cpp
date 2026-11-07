@@ -81,7 +81,7 @@ int main() {
     legacyChord << "MYWARKEY 4 0 1 0 1 0 0 \"Old\" 0 0 1 2 65 66 68 QUICKCHAT 10 ";
     for (int i=0;i<10;++i) legacyChord << "\"\" ";
     require(readSettings(legacyChord).profiles[0].combinations[0].mode == CombinationMode::InputChord);
-    for (auto keys : {std::vector<int>{'A'}, std::vector<int>{'A','A'}, std::vector<int>{'A','B','C','D','E','F'}}) {
+    for (auto keys : {std::vector<int>{'A'}, std::vector<int>{'A','A'}}) {
         bool failed = false; try { combinationKeys(keys); } catch (...) { failed = true; } require(failed);
     }
     // Five-key sequences preserve order, use the configured onset interval,
@@ -110,5 +110,17 @@ int main() {
         std::stringstream badSpeed; badSpeed << "MYWARKEY 6 0 1 0 1 0 0 " << invalid;
         bool rejected=false; try { (void)readSettings(badSpeed); } catch (...) { rejected=true; } require(rejected);
     }
+    // Slot growth has no five-key ceiling; long sequences may repeat keys.
+    std::vector<int> longKeys(40,'A');
+    require(combinationKeys(longKeys,CombinationMode::Sequence).size()==40);
+    Settings longSettings;
+    longSettings.profiles[0].combinations={{{'A','B','A','B','A','B'},'X',CombinationMode::Sequence,{'A','B','A',0,'B','A','B',0,0,0}}};
+    std::stringstream longFile; writeSettings(longFile,longSettings); auto longRead=readSettings(longFile);
+    require(longRead.profiles[0].combinations[0].fields.size()==10 && longRead.profiles[0].combinations[0].keys.size()==6);
+    sent.clear(); Remapper longRun;
+    Profile longProfile{"Long",false,{},{{{'A','B','A','B','A','B'},'X',CombinationMode::Sequence}}};
+    longRun.event('X',true,longProfile,true,send,0); longRun.event('X',false,longProfile,true,send,1);
+    for (int i=0;i<6;++i) { longRun.tick(i*80+60,longProfile,true,send); if (i<5) longRun.tick((i+1)*80,longProfile,true,send); }
+    require(sent.size()==12 && sent.back()==std::make_pair(int('B'),false));
     std::cout << "Combination order, overlap, fallback, cleanup, shared targets and persistence passed.\n";
 }

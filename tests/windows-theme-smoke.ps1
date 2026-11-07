@@ -50,6 +50,7 @@ public static class ThemeWindow {
     [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr h, ref Point p);
     [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr h, IntPtr dc, uint flags);
     [DllImport("user32.dll")] public static extern IntPtr GetDlgItem(IntPtr h, int id);
+    [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint msg, IntPtr w, IntPtr l);
     [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr h, uint msg, IntPtr w, IntPtr l);
     [DllImport("user32.dll")] public static extern IntPtr GetMenu(IntPtr h);
     [DllImport("user32.dll")] public static extern IntPtr GetSubMenu(IntPtr h, int index);
@@ -87,6 +88,13 @@ function Start-MagicKey {
         if ([DateTime]::UtcNow -gt $deadline) { throw 'MagicKey window did not appear' }
     } while ($p.MainWindowHandle -eq [IntPtr]::Zero)
     return $p
+}
+function Assert-Centered($popup,$parent) {
+    $box = New-Object ThemeWindow+Rect
+    $owner = New-Object ThemeWindow+Rect
+    $null = [ThemeWindow]::GetWindowRect($popup,[ref]$box)
+    $null = [ThemeWindow]::GetWindowRect($parent,[ref]$owner)
+    if ([Math]::Abs(($box.Left+$box.Right)-($owner.Left+$owner.Right)) -gt 2 -or [Math]::Abs(($box.Top+$box.Bottom)-($owner.Top+$owner.Bottom)) -gt 2) { throw 'Popup is not centered over MagicKey' }
 }
 function Close-MagicKey($p) {
     $null = $p.CloseMainWindow()
@@ -142,6 +150,15 @@ try {
         Start-Sleep -Milliseconds 200
         if ([IO.File]::ReadAllText((Join-Path $root 'MagicKey.theme')).Trim() -cne "MAGICKEY_THEME 1 $theme") { throw 'Theme was not saved' }
         if ((Get-FileHash -LiteralPath $profile -Algorithm SHA256).Hash -cne $profileHash) { throw 'Changing themes changed profiles' }
+        if ($language -eq 0) {
+            $null = [ThemeWindow]::PostMessage($hwnd,0x111,[IntPtr]2020,[IntPtr]::Zero)
+            $deadline = [DateTime]::UtcNow.AddSeconds(5)
+            do { Start-Sleep -Milliseconds 50; $dialog = [ThemeWindow]::FindWindow('#32770','Notification diagnostics') } while ($dialog -eq [IntPtr]::Zero -and [DateTime]::UtcNow -lt $deadline)
+            if ($dialog -eq [IntPtr]::Zero) { throw 'Diagnostic popup did not open' }
+            Start-Sleep -Milliseconds 100
+            Assert-Centered $dialog $hwnd
+            $null = [ThemeWindow]::SendMessage($dialog,0x111,[IntPtr]1,[IntPtr]::Zero)
+        }
         # Pause before closing: every normal launch must still start enabled.
         $null = [ThemeWindow]::SendMessage($hwnd, 0x8001, [IntPtr]::Zero, [IntPtr]::Zero)
         $pausedLabel = New-Object Text.StringBuilder 256
@@ -220,7 +237,7 @@ try {
         $null = [ThemeWindow]::SendMessage($hwnd, 0x8001, [IntPtr]::Zero, [IntPtr]::Zero) # Pause first.
         $null = [ThemeWindow]::SendMessage($hwnd, 0x8005, [IntPtr]$index, [IntPtr]::Zero)
         $contents = [IO.File]::ReadAllText($profile)
-        if (!$contents.StartsWith("MYWARKEY 6 $index 11 0 1")) { throw "Profile slot $index did not persist" }
+        if (!$contents.StartsWith("MYWARKEY 7 $index 11 0 1")) { throw "Profile slot $index did not persist" }
         $label = New-Object Text.StringBuilder 256
         $null = [ThemeWindow]::GetWindowText([ThemeWindow]::GetDlgItem($hwnd, 112), $label, 256)
         if ($label.ToString() -cne "Pause remapping`nCtrl + Alt + F12") { throw 'Profile shortcut did not enable remapping' }
@@ -263,7 +280,7 @@ try {
     # Windows-key blocking is global across profile changes.
     $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]111,[IntPtr]::Zero)
     $null = [ThemeWindow]::SendMessage($hwnd,0x8005,[IntPtr]::Zero,[IntPtr]::Zero)
-    if (![IO.File]::ReadAllText($profile).StartsWith("MYWARKEY 6 0 11 0 1 1")) { throw 'Global Windows-key setting lost on profile switch' }
+    if (![IO.File]::ReadAllText($profile).StartsWith("MYWARKEY 7 0 11 0 1 1")) { throw 'Global Windows-key setting lost on profile switch' }
     # Route a captured replacement into the dedicated numpad mapping and
     # verify it stays out of the general table. Generation is intentionally
     # opaque; stale capture messages must be ignored until the current token.
@@ -296,19 +313,25 @@ try {
     $null = [ThemeWindow]::GetWindowText([ThemeWindow]::GetDlgItem($hwnd,20002),$caption.Clear(),256)
     if ($caption.Length -ne 0) { throw 'Cleared third key shows placeholder text' }
     foreach ($n in 1..2) { $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]20007,[IntPtr]::Zero) }
-    if ([ThemeWindow]::GetDlgItem($hwnd,20004) -eq [IntPtr]::Zero -or [ThemeWindow]::GetDlgItem($hwnd,20007) -ne [IntPtr]::Zero) { throw 'Combination slot expansion did not stop at five' }
-    Capture-Key 20002 67 'C'
-    Capture-Key 20003 69 'E'
-    Capture-Key 20004 70 'F'
+    Capture-Key 20001 67 'C' # Viewport starts at slot 2 after adding slot 5.
+    Capture-Key 20002 69 'E'
+    Capture-Key 20003 70 'F'
     if (![IO.File]::ReadAllText($profile).Contains('2 5 65 66 67 69 70 68')) { throw 'Five-key sequence did not autosave' }
-    $null = [ThemeWindow]::SendMessage($hwnd,0x7B,[ThemeWindow]::GetDlgItem($hwnd,20002),[IntPtr](-1))
+    $null = [ThemeWindow]::SendMessage($hwnd,0x7B,[ThemeWindow]::GetDlgItem($hwnd,20001),[IntPtr](-1))
     if (![IO.File]::ReadAllText($profile).Contains('2 5 65 66 0 69 70 68')) { throw 'Cleared interior slot lost its position' }
+    foreach ($n in 1..5) { $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]20007,[IntPtr]::Zero) }
+    Capture-Key 20003 71 'G'
+    if (![IO.File]::ReadAllText($profile).Contains('2 10 65 66 0 69 70 0 0 0 0 71 68')) { throw 'Combination could not grow beyond five slots' }
+    if ([ThemeWindow]::GetDlgItem($hwnd,20007) -eq [IntPtr]::Zero) { throw 'Add-slot button disappeared' }
+    foreach ($n in 1..3) { $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]20009,[IntPtr]::Zero) }
+    $null = [ThemeWindow]::GetWindowText([ThemeWindow]::GetDlgItem($hwnd,20000),$caption.Clear(),256)
+    if ($caption.ToString() -cne 'A') { throw 'Cannot navigate back to the first combination slot' }
     $speed = [ThemeWindow]::GetDlgItem($hwnd,502)
     $null = [ThemeWindow]::SendMessage($speed,0x405,[IntPtr]1,[IntPtr]180) # TBM_SETPOS
     $null = [ThemeWindow]::SendMessage($hwnd,0x114,[IntPtr]8,$speed) # TB_ENDTRACK
-    if (![IO.File]::ReadAllText($profile).StartsWith('MYWARKEY 6 0 11 0 1 1 0 180')) { throw 'Sequential speed did not persist' }
+    if (![IO.File]::ReadAllText($profile).StartsWith('MYWARKEY 7 0 11 0 1 1 0 180')) { throw 'Sequential speed did not persist' }
     $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]416,[IntPtr]::Zero)
-    if ([ThemeWindow]::GetDlgItem($hwnd,20009) -eq [IntPtr]::Zero) { throw 'Add combination row did not work' }
+    if ([ThemeWindow]::GetDlgItem($hwnd,20011) -eq [IntPtr]::Zero) { throw 'Add combination row did not work' }
     $compactBounds = New-Object ThemeWindow+Rect
     $null = [ThemeWindow]::GetClientRect($hwnd,[ref]$compactBounds)
     # More than the visible four mapping rows must remain reachable by scrolling.
@@ -323,6 +346,7 @@ try {
     $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]121,[IntPtr]::Zero)
     $chat = [ThemeWindow]::FindWindow('MagicKey.QuickChat','Quick Chat Settings')
     if ($chat -eq [IntPtr]::Zero) { throw 'Quick Chat editor missing' }
+    Assert-Centered $chat $hwnd
     $slots = [ThemeWindow]::GetDlgItem($chat,401)
     $edit = [ThemeWindow]::GetDlgItem($chat,402)
     if (![ThemeWindow]::SetControlText($edit,'你好 诸葛亮')) { throw 'Quick Chat message edit could not be set' }
@@ -374,9 +398,12 @@ try {
     $hwnd = $process.MainWindowHandle
     $null = [ThemeWindow]::SendMessage($hwnd,0x8005,[IntPtr]::Zero,[IntPtr]::Zero)
     if ([ThemeWindow]::SendMessage([ThemeWindow]::GetDlgItem($hwnd,502),0x400,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -ne 180) { throw 'Sequential speed lost after restart' }
-    if ([ThemeWindow]::GetDlgItem($hwnd,20004) -eq [IntPtr]::Zero) { throw 'Five-slot layout lost after restart' }
+    if ([ThemeWindow]::GetDlgItem($hwnd,20010) -eq [IntPtr]::Zero) { throw 'Long combination navigation lost after restart' }
     $null = [ThemeWindow]::GetWindowText([ThemeWindow]::GetDlgItem($hwnd,20002),$caption.Clear(),256)
     if ($caption.Length -ne 0) { throw 'Blank interior slot lost after restart' }
+    foreach ($n in 1..2) { $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]20010,[IntPtr]::Zero) }
+    $null = [ThemeWindow]::GetWindowText([ThemeWindow]::GetDlgItem($hwnd,20003),$caption.Clear(),256)
+    if ($caption.ToString() -cne 'G') { throw 'Tail slot lost after restart' }
     Close-MagicKey $process
     $process = $null
     Write-Host 'PASS: ten profile shortcut slots enable and persist; invalid slot ignored.'

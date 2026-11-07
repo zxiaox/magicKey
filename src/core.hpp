@@ -42,7 +42,7 @@ inline Settings readSettings(std::istream& in) {
     int version;
     std::size_t count;
     if (!(in >> magic >> version >> result.selected >> count) || magic != "MYWARKEY" ||
-        (version < 1 || version > 6) || count == 0 || count > 100)
+        (version < 1 || version > 7) || count == 0 || count > 100)
         throw std::runtime_error("Invalid profile file header.");
     if (version >= 2) {
         int scanCodes;
@@ -85,7 +85,7 @@ inline Settings readSettings(std::istream& in) {
             for (int n = 0; n < count; ++n) {
                 int length; Combination c;
                 if (version >= 5) { int mode; if (!(in >> mode) || mode < 0 || mode > 2) throw std::runtime_error("Invalid combination mode."); c.mode = CombinationMode(mode); }
-                if (!(in >> length) || length < (version >= 6 ? 3 : 2) || length > (version >= 6 ? 5 : 3)) throw std::runtime_error("Invalid combination size.");
+                if (!(in >> length) || length < (version >= 6 ? 3 : 2) || (version < 7 && length > (version >= 6 ? 5 : 3))) throw std::runtime_error("Invalid combination size.");
                 for (int k = 0, key; k < length; ++k) { if (!(in >> key)) throw std::runtime_error("Invalid combination key."); if (version >= 6) { if (key < 0 || key > 254) throw std::runtime_error("Invalid combination key."); c.fields.push_back(key); }
                     if (key || version < 6) c.keys.push_back(key); }
                 c.keys = combinationKeys(std::move(c.keys),c.mode);
@@ -118,7 +118,7 @@ inline Settings readSettings(std::istream& in) {
 }
 
 inline void writeSettings(std::ostream& out, const Settings& settings) {
-    out << "MYWARKEY 6 " << settings.selected << ' ' << settings.profiles.size() << ' '
+    out << "MYWARKEY 7 " << settings.selected << ' ' << settings.profiles.size() << ' '
         << settings.language << ' ' << settings.scanCodes << ' ' << settings.blockWindows << ' ' << settings.quickChatSlot << ' ' << settings.sequenceIntervalMs << '\n';
     for (const auto& p : settings.profiles) {
         out << std::quoted(p.name) << ' ' << p.blockWindows << ' ' << p.mappings.size() << '\n';

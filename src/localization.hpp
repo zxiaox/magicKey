@@ -4,6 +4,8 @@
 namespace mywarkey {
 struct Translation { const wchar_t *en, *zh, *ja, *ko; };
 inline constexpr Translation translations[] = {
+    {L"Multi-Key Combinations (click + to add keys)", L"多键组合（点击 + 添加按键）", L"複数キーの組み合わせ（+ でキーを追加）", L"다중 키 조합 (+를 눌러 키 추가)"},
+    {L"A combination needs at least two keys.", L"组合至少需要两个按键。", L"組み合わせには2キー以上が必要です。", L"조합에는 키가 2개 이상 필요합니다."},
     {L"Sequential Input Speed", L"顺序输入速度", L"順次入力の速度", L"순차 입력 속도"},
     {L"Fastest: 80 ms   Slowest: 180 ms. Right-click a key slot to clear it.", L"最快：80 毫秒   最慢：180 毫秒。右键点击按键槽可清除。", L"最速：80 ms   最遅：180 ms。キー欄は右クリックで解除。", L"최고 속도: 80 ms   최저 속도: 180 ms. 키 슬롯을 우클릭하여 지웁니다."},
     {L"A combination needs two to five keys.", L"组合需要两到五个按键。", L"組み合わせには2～5キーが必要です。", L"조합에는 2~5개의 키가 필요합니다."},

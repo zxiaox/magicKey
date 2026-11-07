@@ -1,9 +1,9 @@
-# MagicKey v1.11.0
+# MagicKey v1.12.0
 
-- Put the combination trigger first: X = A+B+C. Removed the Original Key / New Key / Mode header row.
-- New combination rows have three output slots. Use + to add a fourth or fifth slot; unused slots remain blank and are skipped. Right-click still clears a field.
-- Preserve blank positions and expanded slot counts when saving and reopening.
-- Added a global Sequential Input Speed slider: 80–180 ms between successive press starts, default 80 ms. Each key is held for 60 ms; the remaining interval is the gap. Timing is nominal and subject to Windows scheduling.
-- Existing profiles, output modes, Quick Chat, languages and themes are preserved. Settings versions 1–5 load; saving upgrades to version 6, which older executables cannot read.
+- Removed the five-slot cap. Keep adding combination slots with +; use ‹ / › to navigate long rows. Empty slots and their positions remain saved.
+- Clarified the combination title with a click-+ hint.
+- Sequential timing remains unchanged: the hold stays at 60 ms, and the speed slider changes only the gap. For example, 100 ms means a 60 ms hold plus a 40 ms gap.
+- Center Quick Chat Settings, update prompts, confirmations, errors and diagnostics over MagicKey, clamping them to the monitor work area. Dialogs without an existing app window use monitor centering.
+- Settings versions 1–6 load automatically. Saving writes version 7; older executables cannot read it.
 
 Download MagicKey.exe or the portable ZIP, or use Settings → Check for updates.
