@@ -46,6 +46,7 @@ public static class ThemeWindow {
     private delegate bool EnumProc(IntPtr h,IntPtr l);
     [DllImport("user32.dll")] private static extern bool EnumWindows(EnumProc callback,IntPtr l);
     [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr h,out uint pid);
+    [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr h);
     [DllImport("user32.dll")] private static extern bool IsWindowEnabled(IntPtr h);
     [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr h);
     [DllImport("user32.dll",CharSet=CharSet.Unicode)] private static extern int GetClassName(IntPtr h,System.Text.StringBuilder text,int count);
@@ -125,10 +126,18 @@ function Assert-Centered($popup,$parent) {
     $expectedY=[Math]::Max($work.Top,[Math]::Min($expectedY,[Math]::Max($work.Top,$work.Bottom-$height)))
     if ([Math]::Abs($box.Left-$expectedX) -gt 1 -or [Math]::Abs($box.Top-$expectedY) -gt 1) { throw 'Popup is not centered over MagicKey' }
 }
+function Close-Popup($popup) {
+    $null=[ThemeWindow]::SendMessage($popup,0x10,[IntPtr]::Zero,[IntPtr]::Zero)
+    $deadline=[DateTime]::UtcNow.AddSeconds(5)
+    while ([ThemeWindow]::IsWindow($popup)) {
+        if ([DateTime]::UtcNow -gt $deadline) { throw 'Popup did not finish closing' }
+        Start-Sleep -Milliseconds 50
+    }
+}
 function Close-MagicKey($p) {
     # Owned dialogs can change Process.MainWindowHandle; close the known root.
     $main=[ThemeWindow]::FindWindow('mywarkey.Portable.Window',$null)
-    $null=[ThemeWindow]::PostMessage($main,0x10,[IntPtr]::Zero,[IntPtr]::Zero)
+    $null=[ThemeWindow]::SendMessage($main,0x112,[IntPtr]0xF060,[IntPtr]::Zero)
     if (!$p.WaitForExit(5000)) {
         Write-Host ([ThemeWindow]::DumpWindows($p.Id))
         if (!$p.WaitForExit(40000)) { Write-Host ([ThemeWindow]::DumpWindows($p.Id)); throw 'MagicKey did not close cleanly' }
@@ -192,14 +201,14 @@ try {
             if ($dialog -eq [IntPtr]::Zero) { throw 'Diagnostic popup did not open' }
             Start-Sleep -Milliseconds 100
             Assert-Centered $dialog $hwnd
-            $null = [ThemeWindow]::SendMessage([ThemeWindow]::GetDlgItem($dialog,1),0xF5,[IntPtr]::Zero,[IntPtr]::Zero)
+            Close-Popup $dialog
             $null = [ThemeWindow]::PostMessage($hwnd,0x111,[IntPtr]505,[IntPtr]::Zero)
             $deadline=[DateTime]::UtcNow.AddSeconds(5)
             do { Start-Sleep -Milliseconds 50; $picker=[ThemeWindow]::FindWindow('#32770','Select war3.exe') } while ($picker -eq [IntPtr]::Zero -and [DateTime]::UtcNow -lt $deadline)
             if ($picker -eq [IntPtr]::Zero) { throw 'Warcraft executable picker did not open' }
             Start-Sleep -Milliseconds 100
             Assert-Centered $picker $hwnd
-            $null = [ThemeWindow]::SendMessage([ThemeWindow]::GetDlgItem($picker,2),0xF5,[IntPtr]::Zero,[IntPtr]::Zero)
+            Close-Popup $picker
         }
         # Pause before closing: every normal launch must still start enabled.
         $null = [ThemeWindow]::SendMessage($hwnd, 0x8001, [IntPtr]::Zero, [IntPtr]::Zero)
