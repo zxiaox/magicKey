@@ -1,4 +1,4 @@
-MagicKey v1.10.4 - portable keyboard remapper for Windows 10/11 x64
+MagicKey v1.11.0 - portable keyboard remapper for Windows 10/11 x64
 https://github.com/zxiaox/magicKey
 
 Run MagicKey.exe from a writable folder. No installation, Visual Studio, CMake,
@@ -20,12 +20,15 @@ immediately. Add row creates a blank draft; x removes a row. Right-click an
 output to clear it or choose Disabled. Right-click a trigger to clear it.
 Incomplete drafts are not saved and are discarded on profile switch or exit.
 
-Combinations: enter two or three output keys on the left and a trigger on the
-right. Together sends the outputs simultaneously; Sequence sends them in order.
-The optional third field stays blank when unused. Every complete edit, including
-mode changes, saves immediately. Right-click any key field to clear it.
-Legacy Input chord rules retain the opposite direction: left-hand keys trigger
-the right-hand output when pressed within 150 ms.
+Combinations: the trigger comes first, followed by outputs: X = A+B+C.
+Three output slots appear by default. Use + to add slots, up to five. Leave unused
+slots blank; right-click a slot to clear it. Blank positions and slot count are saved.
+Together sends the outputs simultaneously; Sequence sends them in order.
+Sequential Input Speed sets a global nominal onset interval of 80-180 ms (default
+80 ms). Keys are held for 60 ms, with a 20-120 ms gap. Actual timing depends on
+Windows scheduling. The slider does not affect Together mode.
+Legacy Input chord rules retain the reverse behavior: right-hand physical keys
+trigger the first field's output when pressed within 150 ms.
 One output macro runs at a time; repeats do not restart it. Pause/profile/focus
 changes cancel generated input. Generated keys bypass remapping.
 
@@ -38,7 +41,7 @@ The previous executable is kept as MagicKey.exe.backup.
 
 Profiles and language use mywarkey.profiles beside the executable (the legacy
 filename is intentional). Appearance is saved separately in MagicKey.theme.
-Existing settings versions 1-4 load; saving writes version 5. Keep a backup if
+Existing settings versions 1-5 load; saving writes version 6. Keep a backup if
 downgrading, since older executables cannot read the current format.
 Disable Windows keys is global under Settings.
 

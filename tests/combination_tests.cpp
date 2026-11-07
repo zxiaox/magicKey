@@ -81,8 +81,34 @@ int main() {
     legacyChord << "MYWARKEY 4 0 1 0 1 0 0 \"Old\" 0 0 1 2 65 66 68 QUICKCHAT 10 ";
     for (int i=0;i<10;++i) legacyChord << "\"\" ";
     require(readSettings(legacyChord).profiles[0].combinations[0].mode == CombinationMode::InputChord);
-    for (auto keys : {std::vector<int>{'A'}, std::vector<int>{'A','A'}, std::vector<int>{'A','B','C','D'}}) {
+    for (auto keys : {std::vector<int>{'A'}, std::vector<int>{'A','A'}, std::vector<int>{'A','B','C','D','E','F'}}) {
         bool failed = false; try { combinationKeys(keys); } catch (...) { failed = true; } require(failed);
+    }
+    // Five-key sequences preserve order, use the configured onset interval,
+    // and still pair every down/up. Blank UI fields survive round-tripping.
+    sent.clear(); Remapper five;
+    Profile fiveProfile{"Five",false,{},{{{'A','B','C','D','E'},'X',CombinationMode::Sequence}}};
+    fiveProfile.sequenceIntervalMs=180;
+    five.event('X',true,fiveProfile,true,send,0); five.event('X',false,fiveProfile,true,send,10);
+    for (int i=0;i<5;++i) {
+        five.tick(i*180+60,fiveProfile,true,send);
+        require(sent.size() == std::size_t((i+1)*2));
+        if (i<4) { five.tick((i+1)*180-1,fiveProfile,true,send); require(sent.size()==std::size_t((i+1)*2)); five.tick((i+1)*180,fiveProfile,true,send); }
+    }
+    require(sent == Events{{'A',true},{'A',false},{'B',true},{'B',false},{'C',true},{'C',false},{'D',true},{'D',false},{'E',true},{'E',false}});
+    Settings fiveSettings; fiveSettings.sequenceIntervalMs=180;
+    fiveSettings.profiles[0].combinations={{{'A','B','D'},'X',CombinationMode::Sequence,{'A','B',0,'D',0}}};
+    std::stringstream fiveFile; writeSettings(fiveFile,fiveSettings); auto fiveRead=readSettings(fiveFile);
+    require(fiveRead.sequenceIntervalMs==180 && fiveRead.profiles[0].combinations[0].fields==std::vector<int>{'A','B',0,'D',0});
+    require(fiveRead.profiles[0].combinations[0].keys==std::vector<int>{'A','B','D'});
+    std::stringstream oldMacro;
+    oldMacro << "MYWARKEY 5 0 1 0 1 0 0 \"Old\" 0 0 1 2 2 65 66 88 QUICKCHAT 10 ";
+    for (int i=0;i<10;++i) oldMacro << "\"\" ";
+    auto oldMacroRead=readSettings(oldMacro);
+    require(oldMacroRead.sequenceIntervalMs==80 && oldMacroRead.profiles[0].combinations[0].keys==std::vector<int>{'A','B'});
+    for (int invalid : {79,181}) {
+        std::stringstream badSpeed; badSpeed << "MYWARKEY 6 0 1 0 1 0 0 " << invalid;
+        bool rejected=false; try { (void)readSettings(badSpeed); } catch (...) { rejected=true; } require(rejected);
     }
     std::cout << "Combination order, overlap, fallback, cleanup, shared targets and persistence passed.\n";
 }

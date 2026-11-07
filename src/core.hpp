@@ -17,6 +17,7 @@ struct Profile {
     bool blockWindows = false;
     std::map<int, int> mappings; // 0 means disable the source key.
     std::vector<Combination> combinations;
+    int sequenceIntervalMs = 80; // Runtime copy of the global preference.
 };
 inline std::map<int, int> defaultMappings() {
     return {{'Q',0x67}, {'W',0x68}, {'R',0x64}, {'T',0x65}};
@@ -27,6 +28,7 @@ inline Profile newProfile(std::string name) {
 struct Settings {
     std::size_t selected = 0;
     int quickChatSlot = 0;
+    int sequenceIntervalMs = 80;
     int language = 0; // English, Simplified Chinese, Japanese, Korean.
     bool scanCodes = true;
     bool blockWindows = false;
@@ -40,7 +42,7 @@ inline Settings readSettings(std::istream& in) {
     int version;
     std::size_t count;
     if (!(in >> magic >> version >> result.selected >> count) || magic != "MYWARKEY" ||
-        (version < 1 || version > 5) || count == 0 || count > 100)
+        (version < 1 || version > 6) || count == 0 || count > 100)
         throw std::runtime_error("Invalid profile file header.");
     if (version >= 2) {
         int scanCodes;
@@ -56,6 +58,8 @@ inline Settings readSettings(std::istream& in) {
     }
     if (version >= 4 && (!(in >> result.quickChatSlot) || result.quickChatSlot < 0 || result.quickChatSlot > 9))
         throw std::runtime_error("Invalid Quick Chat slot.");
+    if (version >= 6 && (!(in >> result.sequenceIntervalMs) || result.sequenceIntervalMs < 80 || result.sequenceIntervalMs > 180))
+        throw std::runtime_error("Invalid sequential input speed.");
     result.profiles.clear();
     for (std::size_t i = 0; i < count; ++i) {
         Profile p;
@@ -81,14 +85,16 @@ inline Settings readSettings(std::istream& in) {
             for (int n = 0; n < count; ++n) {
                 int length; Combination c;
                 if (version >= 5) { int mode; if (!(in >> mode) || mode < 0 || mode > 2) throw std::runtime_error("Invalid combination mode."); c.mode = CombinationMode(mode); }
-                if (!(in >> length) || length < 2 || length > 3) throw std::runtime_error("Invalid combination size.");
-                for (int k = 0, key; k < length; ++k) { if (!(in >> key)) throw std::runtime_error("Invalid combination key."); c.keys.push_back(key); }
+                if (!(in >> length) || length < (version >= 6 ? 3 : 2) || length > (version >= 6 ? 5 : 3)) throw std::runtime_error("Invalid combination size.");
+                for (int k = 0, key; k < length; ++k) { if (!(in >> key)) throw std::runtime_error("Invalid combination key."); if (version >= 6) { if (key < 0 || key > 254) throw std::runtime_error("Invalid combination key."); c.fields.push_back(key); }
+                    if (key || version < 6) c.keys.push_back(key); }
                 c.keys = combinationKeys(std::move(c.keys),c.mode);
                 if (!(in >> c.target) || c.target < 0 || c.target > 254 || (c.mode != CombinationMode::InputChord && c.target == 0)) throw std::runtime_error("Invalid combination target.");
                 for (const auto& old : p.combinations) if ((c.mode == CombinationMode::InputChord && old.mode == c.mode && old.keys == c.keys) || (c.mode != CombinationMode::InputChord && old.mode != CombinationMode::InputChord && old.target == c.target)) throw std::runtime_error("Duplicate combination.");
                 p.combinations.push_back(std::move(c));
             }
         }
+        p.sequenceIntervalMs=result.sequenceIntervalMs;
         result.profiles.push_back(std::move(p));
     }
     if (version >= 3) {
@@ -112,14 +118,16 @@ inline Settings readSettings(std::istream& in) {
 }
 
 inline void writeSettings(std::ostream& out, const Settings& settings) {
-    out << "MYWARKEY 5 " << settings.selected << ' ' << settings.profiles.size() << ' '
-        << settings.language << ' ' << settings.scanCodes << ' ' << settings.blockWindows << ' ' << settings.quickChatSlot << '\n';
+    out << "MYWARKEY 6 " << settings.selected << ' ' << settings.profiles.size() << ' '
+        << settings.language << ' ' << settings.scanCodes << ' ' << settings.blockWindows << ' ' << settings.quickChatSlot << ' ' << settings.sequenceIntervalMs << '\n';
     for (const auto& p : settings.profiles) {
         out << std::quoted(p.name) << ' ' << p.blockWindows << ' ' << p.mappings.size() << '\n';
         for (auto [from, to] : p.mappings) out << from << ' ' << to << '\n';
         out << p.combinations.size() << '\n';
         for (const auto& c : p.combinations) {
-            out << int(c.mode) << ' ' << c.keys.size(); for (int key : c.keys) out << ' ' << key;
+            auto fields = c.fields.empty() ? c.keys : c.fields;
+            fields.resize(std::max(std::size_t(3),fields.size()),0);
+            out << int(c.mode) << ' ' << fields.size(); for (int key : fields) out << ' ' << key;
             out << ' ' << c.target << '\n';
         }
     }
@@ -148,7 +156,7 @@ class Remapper {
     std::array<std::uint64_t,256> minimumRelease{};
     std::array<bool,256> delayedRelease{};
     bool contains(const std::vector<int>& keys, int key) const { return std::find(keys.begin(),keys.end(),key) != keys.end(); }
-    struct MacroRun { std::vector<int> keys; CombinationMode mode; std::size_t index = 0; bool down = true; std::uint64_t next = 0; };
+    struct MacroRun { std::vector<int> keys; CombinationMode mode; std::size_t index = 0; bool down = true; std::uint64_t next = 0; int interval = 80; };
     std::vector<MacroRun> macros;
     bool allowed(const Combination& c, const Profile& p) const { return c.mode == CombinationMode::InputChord && (!p.blockWindows || (!contains(c.keys,0x5B) && !contains(c.keys,0x5C))); }
     template<class Sink> void start(int target, Sink& send, bool buffered = false) {
@@ -216,7 +224,7 @@ public:
                 for (auto key = run.keys.rbegin(); key != run.keys.rend(); ++key) stop(*key,send);
                 macros.clear();
             } else if (run.down) {
-                stop(run.keys[run.index],send); run.down = false; run.next = now + 20;
+                stop(run.keys[run.index],send); run.down = false; run.next = now + run.interval - 60;
                 if (++run.index == run.keys.size()) macros.clear();
             } else { start(run.keys[run.index],send,true); run.down = true; run.next = now + 60; }
         }
@@ -249,7 +257,7 @@ public:
                     if (c.mode == CombinationMode::Together) std::stable_partition(outputs.begin(),outputs.end(),[](int key) {
                         return key == 0x10 || key == 0x11 || key == 0x12 || (key >= 0xA0 && key <= 0xA5) || key == 0x5B || key == 0x5C;
                     });
-                    macros.push_back({outputs,c.mode,0,true,now+60});
+                    macros.push_back({outputs,c.mode,0,true,now+60,std::clamp(p.sequenceIntervalMs,80,180)});
                     if (c.mode == CombinationMode::Together) for (int key : outputs) start(key,send,true);
                     else start(c.keys[0],send,true);
                 }

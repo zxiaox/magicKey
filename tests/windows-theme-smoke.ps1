@@ -122,7 +122,7 @@ try {
         if ([ThemeWindow]::GetDlgItem($hwnd, 300) -eq [IntPtr]::Zero -or [ThemeWindow]::GetDlgItem($hwnd, 305) -eq [IntPtr]::Zero) { throw 'Dedicated numpad editor missing' }
         if ([ThemeWindow]::GetDlgItem($hwnd, 111) -ne [IntPtr]::Zero) { throw 'Windows-key setting still lives in a profile control' }
         if ([ThemeWindow]::GetDlgItem($hwnd,106) -ne [IntPtr]::Zero) { throw 'Old mapping list still present' }
-        foreach ($id in 10000,10001,10003,10004,20000,20003,20004) {
+        foreach ($id in 10000,10001,10003,10004,20000,20005,20006) {
             if ([ThemeWindow]::GetDlgItem($hwnd,$id) -eq [IntPtr]::Zero) { throw "Inline mapping field $id missing" }
         }
         if ([ThemeWindow]::GetDlgItem($hwnd,10006) -ne [IntPtr]::Zero) { throw 'Keypad mappings leaked into ordinary rows' }
@@ -165,7 +165,7 @@ try {
         if (([ThemeWindow]::GetMenuState($languages, [uint32](2000 + $language), 0) -band 8) -eq 0) { throw 'Language menu selection did not persist' }
         # Exercise hover/leave repainting of a keycap, action button, checkbox
         # and combo before every palette/language screenshot.
-        foreach ($control in 10000,120,121,101,300,20000,20003) {
+        foreach ($control in 10000,120,121,101,300,20000,20005) {
             $item = [ThemeWindow]::GetDlgItem($hwnd,$control)
             $null = [ThemeWindow]::SendMessage($item,0x200,[IntPtr]::Zero,[IntPtr]0x00100010)
             $null = [ThemeWindow]::UpdateWindow($item)
@@ -220,7 +220,7 @@ try {
         $null = [ThemeWindow]::SendMessage($hwnd, 0x8001, [IntPtr]::Zero, [IntPtr]::Zero) # Pause first.
         $null = [ThemeWindow]::SendMessage($hwnd, 0x8005, [IntPtr]$index, [IntPtr]::Zero)
         $contents = [IO.File]::ReadAllText($profile)
-        if (!$contents.StartsWith("MYWARKEY 5 $index 11 0 1")) { throw "Profile slot $index did not persist" }
+        if (!$contents.StartsWith("MYWARKEY 6 $index 11 0 1")) { throw "Profile slot $index did not persist" }
         $label = New-Object Text.StringBuilder 256
         $null = [ThemeWindow]::GetWindowText([ThemeWindow]::GetDlgItem($hwnd, 112), $label, 256)
         if ($label.ToString() -cne "Pause remapping`nCtrl + Alt + F12") { throw 'Profile shortcut did not enable remapping' }
@@ -263,7 +263,7 @@ try {
     # Windows-key blocking is global across profile changes.
     $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]111,[IntPtr]::Zero)
     $null = [ThemeWindow]::SendMessage($hwnd,0x8005,[IntPtr]::Zero,[IntPtr]::Zero)
-    if (![IO.File]::ReadAllText($profile).StartsWith("MYWARKEY 5 0 11 0 1 1")) { throw 'Global Windows-key setting lost on profile switch' }
+    if (![IO.File]::ReadAllText($profile).StartsWith("MYWARKEY 6 0 11 0 1 1")) { throw 'Global Windows-key setting lost on profile switch' }
     # Route a captured replacement into the dedicated numpad mapping and
     # verify it stays out of the general table. Generation is intentionally
     # opaque; stale capture messages must be ignored until the current token.
@@ -283,20 +283,32 @@ try {
     if ($caption.Length -ne 0) { throw 'Optional combination field is not blank' }
     Capture-Key 20000 65 'A'
     Capture-Key 20001 66 'B'
-    Capture-Key 20003 68 'D'
-    if (![IO.File]::ReadAllText($profile).Contains('1 2 65 66 68')) { throw 'Two-key Together rule did not autosave' }
+    Capture-Key 20005 68 'D'
+    if (![IO.File]::ReadAllText($profile).Contains('1 3 65 66 0 68')) { throw 'Two-key Together rule did not autosave' }
     Capture-Key 20002 67 'C'
     if (![IO.File]::ReadAllText($profile).Contains('1 3 65 66 67 68')) { throw 'Third key did not update rule' }
-    $mode = [ThemeWindow]::GetDlgItem($hwnd,20004)
+    $mode = [ThemeWindow]::GetDlgItem($hwnd,20006)
     $null = [ThemeWindow]::SendMessage($mode,0x14E,[IntPtr]2,[IntPtr]::Zero)
-    $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr](20004 -bor (1 -shl 16)),$mode)
+    $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr](20006 -bor (1 -shl 16)),$mode)
     if (![IO.File]::ReadAllText($profile).Contains('2 3 65 66 67 68')) { throw 'Mode change did not autosave' }
     $null = [ThemeWindow]::SendMessage($hwnd,0x7B,[ThemeWindow]::GetDlgItem($hwnd,20002),[IntPtr](-1))
-    if (![IO.File]::ReadAllText($profile).Contains('2 2 65 66 68')) { throw 'Clearing optional key did not retain two-key rule' }
+    if (![IO.File]::ReadAllText($profile).Contains('2 3 65 66 0 68')) { throw 'Clearing optional key did not retain two-key rule' }
     $null = [ThemeWindow]::GetWindowText([ThemeWindow]::GetDlgItem($hwnd,20002),$caption.Clear(),256)
     if ($caption.Length -ne 0) { throw 'Cleared third key shows placeholder text' }
+    foreach ($n in 1..2) { $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]20007,[IntPtr]::Zero) }
+    if ([ThemeWindow]::GetDlgItem($hwnd,20004) -eq [IntPtr]::Zero -or [ThemeWindow]::GetDlgItem($hwnd,20007) -ne [IntPtr]::Zero) { throw 'Combination slot expansion did not stop at five' }
+    Capture-Key 20002 67 'C'
+    Capture-Key 20003 69 'E'
+    Capture-Key 20004 70 'F'
+    if (![IO.File]::ReadAllText($profile).Contains('2 5 65 66 67 69 70 68')) { throw 'Five-key sequence did not autosave' }
+    $null = [ThemeWindow]::SendMessage($hwnd,0x7B,[ThemeWindow]::GetDlgItem($hwnd,20002),[IntPtr](-1))
+    if (![IO.File]::ReadAllText($profile).Contains('2 5 65 66 0 69 70 68')) { throw 'Cleared interior slot lost its position' }
+    $speed = [ThemeWindow]::GetDlgItem($hwnd,502)
+    $null = [ThemeWindow]::SendMessage($speed,0x405,[IntPtr]1,[IntPtr]180) # TBM_SETPOS
+    $null = [ThemeWindow]::SendMessage($hwnd,0x114,[IntPtr]8,$speed) # TB_ENDTRACK
+    if (![IO.File]::ReadAllText($profile).StartsWith('MYWARKEY 6 0 11 0 1 1 0 180')) { throw 'Sequential speed did not persist' }
     $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]416,[IntPtr]::Zero)
-    if ([ThemeWindow]::GetDlgItem($hwnd,20006) -eq [IntPtr]::Zero) { throw 'Add combination row did not work' }
+    if ([ThemeWindow]::GetDlgItem($hwnd,20009) -eq [IntPtr]::Zero) { throw 'Add combination row did not work' }
     $compactBounds = New-Object ThemeWindow+Rect
     $null = [ThemeWindow]::GetClientRect($hwnd,[ref]$compactBounds)
     # More than the visible four mapping rows must remain reachable by scrolling.
@@ -356,6 +368,15 @@ try {
     $null = [ThemeWindow]::GetControlText($edit,$caption.Clear(),256)
     if ($caption.Length -ne 0) { throw 'Quick Chat clear did not clear slot' }
     $null = [ThemeWindow]::SendMessage($chat,0x10,[IntPtr]::Zero,[IntPtr]::Zero)
+    Close-MagicKey $process
+    $process = $null
+    $process = Start-MagicKey
+    $hwnd = $process.MainWindowHandle
+    $null = [ThemeWindow]::SendMessage($hwnd,0x8005,[IntPtr]::Zero,[IntPtr]::Zero)
+    if ([ThemeWindow]::SendMessage([ThemeWindow]::GetDlgItem($hwnd,502),0x400,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -ne 180) { throw 'Sequential speed lost after restart' }
+    if ([ThemeWindow]::GetDlgItem($hwnd,20004) -eq [IntPtr]::Zero) { throw 'Five-slot layout lost after restart' }
+    $null = [ThemeWindow]::GetWindowText([ThemeWindow]::GetDlgItem($hwnd,20002),$caption.Clear(),256)
+    if ($caption.Length -ne 0) { throw 'Blank interior slot lost after restart' }
     Close-MagicKey $process
     $process = $null
     Write-Host 'PASS: ten profile shortcut slots enable and persist; invalid slot ignored.'
