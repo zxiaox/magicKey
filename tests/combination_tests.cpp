@@ -113,9 +113,10 @@ int main() {
     // Slot growth has no five-key ceiling; long sequences may repeat keys.
     std::vector<int> longKeys(40,'A');
     require(combinationKeys(longKeys,CombinationMode::Sequence).size()==40);
-    Settings longSettings;
+    Settings longSettings; longSettings.warcraftPath=u8"C:\\Warcraft 诸葛亮\\war3.exe";
     longSettings.profiles[0].combinations={{{'A','B','A','B','A','B'},'X',CombinationMode::Sequence,{'A','B','A',0,'B','A','B',0,0,0}}};
     std::stringstream longFile; writeSettings(longFile,longSettings); auto longRead=readSettings(longFile);
+    require(longRead.warcraftPath==longSettings.warcraftPath);
     require(longRead.profiles[0].combinations[0].fields.size()==10 && longRead.profiles[0].combinations[0].keys.size()==6);
     sent.clear(); Remapper longRun;
     Profile longProfile{"Long",false,{},{{{'A','B','A','B','A','B'},'X',CombinationMode::Sequence}}};

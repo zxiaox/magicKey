@@ -6,5 +6,7 @@ int main() {
     if (!GetModuleFileNameW(nullptr, path, DWORD(std::size(path)))) return 1;
     std::ofstream marker(std::filesystem::path(path).parent_path() / L"installed.marker");
     marker << "MagicKey update restarted successfully\n";
-    return marker ? 0 : 1;
+    std::ofstream working(std::filesystem::path(path).parent_path() / L"working-directory.txt");
+    working << std::filesystem::current_path().u8string();
+    return marker && working ? 0 : 1;
 }

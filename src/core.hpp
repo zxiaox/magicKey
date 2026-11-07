@@ -29,6 +29,7 @@ struct Settings {
     std::size_t selected = 0;
     int quickChatSlot = 0;
     int sequenceIntervalMs = 80;
+    std::string warcraftPath;
     int language = 0; // English, Simplified Chinese, Japanese, Korean.
     bool scanCodes = true;
     bool blockWindows = false;
@@ -105,6 +106,12 @@ inline Settings readSettings(std::istream& in) {
             for (unsigned char c : message) if (c < 32 || c == 127) throw std::runtime_error("Quick chat must be a single line.");
         }
     }
+    if (version >= 7) {
+        std::string marker;
+        if (!(in >> marker >> std::quoted(result.warcraftPath)) || marker != "WARCRAFT" || result.warcraftPath.size()>131072)
+            throw std::runtime_error("Invalid Warcraft executable path.");
+        for (unsigned char c : result.warcraftPath) if (c<32) throw std::runtime_error("Invalid Warcraft executable path.");
+    }
     in >> std::ws;
     if (!in.eof() || result.selected >= result.profiles.size())
         throw std::runtime_error("Invalid profile file contents.");
@@ -133,6 +140,7 @@ inline void writeSettings(std::ostream& out, const Settings& settings) {
     }
     out << "QUICKCHAT 10\n";
     for (const auto& message : settings.quickChat) out << std::quoted(message) << '\n';
+    out << "WARCRAFT " << std::quoted(settings.warcraftPath) << '\n';
     if (!out) throw std::runtime_error("Could not write profiles.");
 }
 

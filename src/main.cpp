@@ -1,5 +1,6 @@
 #include <windows.h>
 #include <commctrl.h>
+#include <commdlg.h>
 #include <algorithm>
 #include <iterator>
 #include <mutex>
@@ -23,6 +24,10 @@ enum ControlId { ProfileBox = 101, NewProfile, RenameProfile, DeleteProfile, Pro
 constexpr int NumpadBase = 300;
 constexpr int MapRowBase = 10000, ComboRowBase = 20000, MapScroll = 500, ComboScroll = 501, SequenceSpeed = 502, SequenceValue = 503;
 constexpr int ComboStride = 11;
+constexpr int WarcraftPath = 504, WarcraftBrowse = 505, WarcraftLaunch = 506;
+HWND warcraftPathEdit;
+bool savingWarcraftPath=false;
+bool saveWarcraftPath();
 struct MappingRow { int sent = -1, pressed = 0, original = 0; };
 struct ComboRow { std::vector<int> keys = std::vector<int>(3,0); int keyOffset = 0; int trigger = -1, original = -1; CombinationMode mode = CombinationMode::Together; };
 std::vector<MappingRow> mappingRows;
@@ -385,6 +390,7 @@ void finishUpdate() {
             break;
         }
         case Outcome::Downloaded:
+            if (!saveWarcraftPath()) { discardStaging(result.staging); return; }
             if (quickChatWindow && quickDirty && !saveQuickChat()) { discardStaging(result.staging); return; }
             cancelCapture(); enabled = false; syncEngine();
             try { launchInstaller(result, settings.language); DestroyWindow(window); }
@@ -397,6 +403,7 @@ void finishUpdate() {
 void refresh() {
     for (const auto& entry : localizedControls) SetWindowTextW(entry.first, tr(entry.second.c_str()));
     refreshMenus();
+    if (GetFocus()!=warcraftPathEdit) SetWindowTextW(warcraftPathEdit,wide(settings.warcraftPath).c_str());
     updateCaptureButtons();
     SendMessageW(profileBox, CB_RESETCONTENT, 0, 0);
     for (std::size_t i = 0; i < settings.profiles.size(); ++i) {
@@ -421,9 +428,10 @@ void refresh() {
     }
     renderRows(); updateCaptureButtons();
     SendMessageW(GetDlgItem(window,SequenceSpeed),TBM_SETPOS,TRUE,settings.sequenceIntervalMs);
-    SetWindowTextW(GetDlgItem(window,SequenceValue),(std::to_wstring(settings.sequenceIntervalMs)+L" ms").c_str());
+    SetWindowTextW(GetDlgItem(window,SequenceValue),(std::to_wstring(settings.sequenceIntervalMs)+L" ms (80–180)").c_str());
     auto toggleText = std::wstring(tr(enabled ? L"Pause remapping" : L"Enable remapping")) + L"\nCtrl + Alt + F12";
     SetWindowTextW(toggleButton, toggleText.c_str());
+    SendMessageW(warcraftPathEdit,EM_SETCUEBANNER,TRUE,LPARAM(tr(L"Select war3.exe")));
     SetWindowTextW(statusLabel, tr(enabled ? L"Remapping active" : L"Remapping paused"));
     EnableWindow(GetDlgItem(window, DeleteProfile), settings.profiles.size() > 1);
     InvalidateRect(window, nullptr, FALSE);
@@ -449,7 +457,7 @@ void renderRows() {
         mappingBottom = bottom; themeUI.setMappingBottom(bottom);
         for (const auto& [item,rect] : lowerControls)
             MoveWindow(item,rect.left,rect.top+shift,rect.right-rect.left,rect.bottom-rect.top,TRUE);
-        RECT bounds{0,0,900,694+shift};
+        RECT bounds{0,0,900,702+shift};
         AdjustWindowRect(&bounds,DWORD(GetWindowLongPtrW(window,GWL_STYLE)),TRUE);
         SetWindowPos(window,nullptr,0,0,bounds.right-bounds.left,bounds.bottom-bounds.top,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);
     }
@@ -564,22 +572,75 @@ void makeInterface() {
     control(L"STATIC",L"Multi-Key Combinations (click + to add keys)",0,0,44,454,680,22);
     control(L"BUTTON",L"Add row",WS_TABSTOP,416,740,446,114,30);
     control(L"SCROLLBAR",L"",SBS_VERT,ComboScroll,854,484,16,88);
-    control(L"BUTTON",L"Quick Chat Settings",WS_TABSTOP,QuickChatOpen,482,648,182,38);
-    control(L"STATIC",L"Sequential Input Speed",0,0,44,582,244,20);
-    HWND speed = control(TRACKBAR_CLASSW,L"",TBS_HORZ | TBS_NOTICKS | WS_TABSTOP,SequenceSpeed,300,574,364,32);
+    control(L"BUTTON",L"Quick Chat Settings",WS_TABSTOP,QuickChatOpen,482,656,182,38);
+    control(L"STATIC",L"Sequential Input Speed",0,0,44,574,244,20);
+    HWND speed = control(TRACKBAR_CLASSW,L"",TBS_HORZ | TBS_NOTICKS | WS_TABSTOP,SequenceSpeed,300,566,364,32);
     SendMessageW(speed,TBM_SETRANGE,TRUE,MAKELPARAM(80,180));
     SendMessageW(speed,TBM_SETPAGESIZE,0,10);
-    control(L"STATIC",L"",0,SequenceValue,680,582,174,20);
-    control(L"STATIC",L"Fastest: 80 ms   Slowest: 180 ms. Right-click a key slot to clear it.",0,0,44,610,810,20);
-    statusLabel = control(L"STATIC",L"",0,0,58,656,320,22);
+    control(L"STATIC",L"",0,SequenceValue,680,574,174,20);
+    control(L"STATIC",L"Warcraft III",0,0,44,620,112,20);
+    warcraftPathEdit=control(L"EDIT",L"",WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP,WarcraftPath,160,614,450,28);
+    SendMessageW(warcraftPathEdit,EM_SETLIMITTEXT,32767,0);
+    SendMessageW(warcraftPathEdit,EM_SETCUEBANNER,TRUE,LPARAM(tr(L"Select war3.exe")));
+    control(L"BUTTON",L"Browse...",WS_TABSTOP,WarcraftBrowse,622,612,96,32);
+    control(L"BUTTON",L"Launch",WS_TABSTOP,WarcraftLaunch,730,612,124,32);
+    statusLabel = control(L"STATIC",L"",0,0,58,664,320,22);
     SendMessageW(statusLabel,WM_SETFONT,WPARAM(font),TRUE);
-    toggleButton = control(L"BUTTON",L"",WS_TABSTOP,Toggle,676,648,178,38);
+    toggleButton = control(L"BUTTON",L"",WS_TABSTOP,Toggle,676,656,178,38);
     SendMessageW(profileBox,CB_SETITEMHEIGHT,WPARAM(-1),28);
     for (HWND item=GetWindow(window,GW_CHILD); item; item=GetWindow(item,GW_HWNDNEXT)) {
         RECT rect; GetWindowRect(item,&rect); MapWindowPoints(nullptr,window,reinterpret_cast<POINT*>(&rect),2);
         if (rect.top >= 442) lowerControls.push_back({item,rect});
     }
     themeUI.apply(window,nullptr,themeUI.theme()); refresh();
+}
+
+std::wstring enteredWarcraftPath() {
+    std::wstring text(32768,L'\0');
+    text.resize(GetWindowTextW(warcraftPathEdit,text.data(),int(text.size())));
+    if (text.size()>1 && text.front()==L'"' && text.back()==L'"') text=text.substr(1,text.size()-2);
+    return text;
+}
+bool saveWarcraftPath() {
+    if (!warcraftPathEdit) return true;
+    if (savingWarcraftPath) return false;
+    auto text=utf8(enteredWarcraftPath());
+    if (text==settings.warcraftPath) return true;
+    auto candidate=settings; candidate.warcraftPath=text;
+    savingWarcraftPath=true; bool saved=commit(std::move(candidate)); savingWarcraftPath=false;
+    return saved;
+}
+void browseWarcraft() {
+    std::array<wchar_t,32768> path{};
+    auto saved=wide(settings.warcraftPath);
+    wcsncpy_s(path.data(),path.size(),saved.c_str(),_TRUNCATE);
+    OPENFILENAMEW file{sizeof(file)}; file.hwndOwner=window;
+    file.lpstrFilter=L"Warcraft III (war3.exe)\0war3.exe\0Executable (*.exe)\0*.exe\0\0";
+    file.lpstrFile=path.data(); file.nMaxFile=DWORD(path.size()); file.lpstrTitle=tr(L"Select war3.exe");
+    file.Flags=OFN_EXPLORER|OFN_FILEMUSTEXIST|OFN_PATHMUSTEXIST|OFN_NOCHANGEDIR|OFN_DONTADDTORECENT;
+    magickey::DialogCenterScope center(window);
+    if (GetOpenFileNameW(&file)) {
+        auto candidate=settings; candidate.warcraftPath=utf8(path.data());
+        if (commit(std::move(candidate))) refresh();
+    } else if (CommDlgExtendedError()) error(L"Could not open the executable picker.");
+}
+void launchWarcraft() {
+    auto path=enteredWarcraftPath();
+    std::error_code problem;
+    if (path.empty() || !std::filesystem::is_regular_file(path,problem) || _wcsicmp(std::filesystem::path(path).extension().c_str(),L".exe")!=0) {
+        error(L"Select an existing Warcraft III executable (.exe)."); return;
+    }
+    auto absolute=std::filesystem::absolute(path,problem);
+    if (problem) { error(L"Select an existing Warcraft III executable (.exe)."); return; }
+    path=absolute.wstring(); SetWindowTextW(warcraftPathEdit,path.c_str());
+    if (!saveWarcraftPath()) return;
+    auto command=L"\""+path+L"\"";
+    auto folder=std::filesystem::path(path).parent_path().wstring();
+    STARTUPINFOW startup{sizeof(startup)}; PROCESS_INFORMATION process{};
+    if (!CreateProcessW(path.c_str(),command.data(),nullptr,nullptr,FALSE,0,nullptr,folder.empty()?nullptr:folder.c_str(),&startup,&process)) {
+        error(L"Could not launch Warcraft III. Check the selected executable and its permissions."); return;
+    }
+    CloseHandle(process.hThread); CloseHandle(process.hProcess);
 }
 
 void loadQuickChatSlot(bool loadText = true) {
@@ -683,6 +744,11 @@ void openQuickChat() {
     ShowWindow(quickChatWindow,SW_SHOW); SetForegroundWindow(quickChatWindow);
 }
 void command(int id, int notification) {
+    if (id==WarcraftPath) {
+        if (notification==EN_CHANGE) EnableWindow(GetDlgItem(window,WarcraftLaunch),GetWindowTextLengthW(warcraftPathEdit)>0);
+        if (notification==EN_KILLFOCUS) saveWarcraftPath();
+        return;
+    }
     if (buildingRows) return;
     if (id >= MapRowBase && id < ComboRowBase + 1100) {
         bool combo = id >= ComboRowBase; int field = (id-(combo ? ComboRowBase : MapRowBase)) % (combo ? ComboStride : 3);
@@ -737,6 +803,8 @@ void command(int id, int notification) {
         else { if (combinationRows.size() >= 100) return; combinationRows.push_back({}); comboOffset = std::max(0,int(combinationRows.size())-2); }
         renderRows(); return;
     }
+    if (id == WarcraftBrowse) { browseWarcraft(); return; }
+    if (id == WarcraftLaunch) { launchWarcraft(); return; }
     if (id == QuickChatOpen) { openQuickChat(); return; }
     if (id == NotificationDiagnostics) { magickey::centeredMessageBox(window, gameNotifications.diagnostics().c_str(), tr(L"Notification diagnostics"), MB_OK | MB_ICONINFORMATION); return; }
     if (id == CheckUpdates) { beginUpdateCheck(); return; }
@@ -863,7 +931,7 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
         case WM_HSCROLL: {
             if (GetDlgCtrlID(reinterpret_cast<HWND>(l)) != SequenceSpeed) break;
             int value=int(SendMessageW(reinterpret_cast<HWND>(l),TBM_GETPOS,0,0));
-            SetWindowTextW(GetDlgItem(hwnd,SequenceValue),(std::to_wstring(value)+L" ms").c_str());
+            SetWindowTextW(GetDlgItem(hwnd,SequenceValue),(std::to_wstring(value)+L" ms (80–180)").c_str());
             if (LOWORD(w) != TB_THUMBTRACK && value != settings.sequenceIntervalMs) {
                 cancelCapture(); auto candidate=settings; candidate.sequenceIntervalMs=value;
                 if (!commit(std::move(candidate))) refresh();
@@ -970,6 +1038,7 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
             SetBkColor(reinterpret_cast<HDC>(w), magickey::color(themeUI.colors().control));
             return LRESULT(themeUI.input());
         case WM_CLOSE:
+            if (!saveWarcraftPath()) return 0;
             if (quickChatWindow && quickDirty && !saveQuickChat()) return 0;
             if (updateClient.busy()) {
                 cancelCapture(); enabled = false; syncEngine();
@@ -1010,6 +1079,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
             auto loaded = readSettings(in);
             for (const auto& p : loaded.profiles) (void)wide(p.name);
             for (const auto& text : loaded.quickChat) (void)wide(text);
+            (void)wide(loaded.warcraftPath);
             settings = std::move(loaded);
         } catch (const std::exception& e) {
             // Preserve the user's original; never silently overwrite damaged profiles.
@@ -1039,7 +1109,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW); wc.hIcon = magickey::appIcon(false); wc.hIconSm = magickey::appIcon(true);
     wc.hbrBackground = nullptr;
     RegisterClassExW(&wc);
-    RECT bounds{0, 0, 900, 694};
+    RECT bounds{0, 0, 900, 702};
     DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN;
     AdjustWindowRect(&bounds, style, TRUE);
     window = CreateWindowExW(WS_EX_CONTROLPARENT, ClassName, L"MagicKey", style, CW_USEDEFAULT, CW_USEDEFAULT,

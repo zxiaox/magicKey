@@ -177,6 +177,8 @@ Legacy **Input chord** rules remain available and preserve their opposite direct
 
 At startup MagicKey automatically checks for a newer release in the background. Current-version and network-failure results stay quiet; an available update prompts before downloading/installing. **Settings → Check for updates** remains available for an explicit check and displays its result. Update checks do not change profiles or pause remapping.
 
-Settings version 7 adds the global sequence interval and variable-length slot layouts, including blank positions. Versions 1–6 still load; version 4 chords retain Input chord mode, and version 5 output macros keep their modes with the default 80 ms interval. Older executables cannot read version 7. Keep a backup when downgrading.
+Settings version 7 supports variable-length slot layouts, blank positions, the global sequence interval, and the global Warcraft executable path. Versions 1–6 still load; version 4 chords retain Input chord mode, and version 5 output macros keep their modes with the default 80 ms interval. Older executables cannot read version 7. Keep a backup when downgrading.
 
 Quick Chat Settings and message dialogs are centered over the main app window and kept within the monitor work area. Dialogs shown before the main window exists, or after it closes, are centered on the monitor. Context menus stay at the pointer.
+
+A **Warcraft III** launcher row sits between combinations and status. Use **Browse...** to select `war3.exe` (or type its executable path), then **Launch**. The path is a global setting and survives profile changes and restarts. Launch starts the selected executable directly, with its containing folder as the working directory. No command-line arguments or elevation are added.

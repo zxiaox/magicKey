@@ -67,3 +67,7 @@ on Warcraft version, settings and privileges.
 Leave Game-compatible input (scan codes) enabled. If the game runs as
 administrator, MagicKey may need the same privilege level.
 Third-party notices and Warcraft artwork attribution are in THIRD-PARTY-NOTICES.txt.
+
+The Warcraft III row above status provides an executable path, Browse and Launch.
+The selected path is global and is preserved after restart. Launch uses the
+executable folder as its working directory.

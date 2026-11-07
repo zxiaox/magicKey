@@ -4,6 +4,13 @@
 namespace mywarkey {
 struct Translation { const wchar_t *en, *zh, *ja, *ko; };
 inline constexpr Translation translations[] = {
+    {L"Select war3.exe", L"选择 war3.exe", L"war3.exe を選択", L"war3.exe 선택"},
+    {L"Browse...", L"浏览…", L"参照…", L"찾아보기…"},
+    {L"Launch", L"启动", L"起動", L"실행"},
+    {L"Could not open the executable picker.", L"无法打开程序选择窗口。", L"実行ファイルの選択画面を開けません。", L"실행 파일 선택 창을 열 수 없습니다."},
+    {L"Select an existing Warcraft III executable (.exe).", L"请选择有效的魔兽争霸 III 程序（.exe）。", L"存在する Warcraft III 実行ファイル（.exe）を選択してください。", L"존재하는 워크래프트 III 실행 파일(.exe)을 선택하세요."},
+    {L"Could not launch Warcraft III. Check the selected executable and its permissions.", L"无法启动魔兽争霸 III，请检查程序路径及权限。", L"Warcraft III を起動できません。パスと権限を確認してください。", L"워크래프트 III를 실행할 수 없습니다. 경로와 권한을 확인하세요."},
+    {L"Invalid Warcraft executable path.", L"魔兽争霸程序路径无效。", L"Warcraft 実行ファイルのパスが無効です。", L"잘못된 워크래프트 실행 파일 경로입니다."},
     {L"Multi-Key Combinations (click + to add keys)", L"多键组合（点击 + 添加按键）", L"複数キーの組み合わせ（+ でキーを追加）", L"다중 키 조합 (+를 눌러 키 추가)"},
     {L"A combination needs at least two keys.", L"组合至少需要两个按键。", L"組み合わせには2キー以上が必要です。", L"조합에는 키가 2개 이상 필요합니다."},
     {L"Sequential Input Speed", L"顺序输入速度", L"順次入力の速度", L"순차 입력 속도"},

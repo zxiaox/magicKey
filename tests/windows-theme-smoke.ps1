@@ -45,6 +45,7 @@ public static class ThemeWindow {
     }
     [StructLayout(LayoutKind.Sequential)] public struct Rect { public int Left, Top, Right, Bottom; }
     [StructLayout(LayoutKind.Sequential)] public struct Point { public int X, Y; }
+    [DllImport("user32.dll")] public static extern bool SystemParametersInfo(uint action, uint parameter, out Rect value, uint flags);
     [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr h, out Rect r);
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out Rect r);
     [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr h, ref Point p);
@@ -94,11 +95,20 @@ function Assert-Centered($popup,$parent) {
     $owner = New-Object ThemeWindow+Rect
     $null = [ThemeWindow]::GetWindowRect($popup,[ref]$box)
     $null = [ThemeWindow]::GetWindowRect($parent,[ref]$owner)
-    if ([Math]::Abs(($box.Left+$box.Right)-($owner.Left+$owner.Right)) -gt 2 -or [Math]::Abs(($box.Top+$box.Bottom)-($owner.Top+$owner.Bottom)) -gt 2) { throw 'Popup is not centered over MagicKey' }
+    $work = New-Object ThemeWindow+Rect
+    $null = [ThemeWindow]::SystemParametersInfo(0x30,0,[ref]$work,0)
+    $width=$box.Right-$box.Left; $height=$box.Bottom-$box.Top
+    $expectedX=[Math]::Floor(($owner.Left+$owner.Right-$width)/2)
+    $expectedY=[Math]::Floor(($owner.Top+$owner.Bottom-$height)/2)
+    $expectedX=[Math]::Max($work.Left,[Math]::Min($expectedX,[Math]::Max($work.Left,$work.Right-$width)))
+    $expectedY=[Math]::Max($work.Top,[Math]::Min($expectedY,[Math]::Max($work.Top,$work.Bottom-$height)))
+    if ([Math]::Abs($box.Left-$expectedX) -gt 1 -or [Math]::Abs($box.Top-$expectedY) -gt 1) { throw 'Popup is not centered over MagicKey' }
 }
 function Close-MagicKey($p) {
-    $null = $p.CloseMainWindow()
-    if (!$p.WaitForExit(10000) -or $p.ExitCode -ne 0) { throw 'MagicKey did not close cleanly' }
+    # Owned dialogs can change Process.MainWindowHandle; close the known root.
+    $main=[ThemeWindow]::FindWindow('mywarkey.Portable.Window',$null)
+    $null=[ThemeWindow]::PostMessage($main,0x10,[IntPtr]::Zero,[IntPtr]::Zero)
+    if (!$p.WaitForExit(45000) -or $p.ExitCode -ne 0) { throw 'MagicKey did not close cleanly' }
 }
 try {
     $cases = @(@(0,0,'ivory'), @(1,0,'midnight'), @(2,0,'arcane'), @(3,0,'warcraft-iii'), @(3,1,'warcraft-iii-zh'), @(3,2,'warcraft-iii-ja'), @(3,3,'warcraft-iii-ko'))
@@ -157,7 +167,14 @@ try {
             if ($dialog -eq [IntPtr]::Zero) { throw 'Diagnostic popup did not open' }
             Start-Sleep -Milliseconds 100
             Assert-Centered $dialog $hwnd
-            $null = [ThemeWindow]::SendMessage($dialog,0x111,[IntPtr]1,[IntPtr]::Zero)
+            $null = [ThemeWindow]::SendMessage([ThemeWindow]::GetDlgItem($dialog,1),0xF5,[IntPtr]::Zero,[IntPtr]::Zero)
+            $null = [ThemeWindow]::PostMessage($hwnd,0x111,[IntPtr]505,[IntPtr]::Zero)
+            $deadline=[DateTime]::UtcNow.AddSeconds(5)
+            do { Start-Sleep -Milliseconds 50; $picker=[ThemeWindow]::FindWindow('#32770','Select war3.exe') } while ($picker -eq [IntPtr]::Zero -and [DateTime]::UtcNow -lt $deadline)
+            if ($picker -eq [IntPtr]::Zero) { throw 'Warcraft executable picker did not open' }
+            Start-Sleep -Milliseconds 100
+            Assert-Centered $picker $hwnd
+            $null = [ThemeWindow]::SendMessage([ThemeWindow]::GetDlgItem($picker,2),0xF5,[IntPtr]::Zero,[IntPtr]::Zero)
         }
         # Pause before closing: every normal launch must still start enabled.
         $null = [ThemeWindow]::SendMessage($hwnd, 0x8001, [IntPtr]::Zero, [IntPtr]::Zero)
@@ -342,6 +359,20 @@ try {
     if ([ThemeWindow]::GetDlgItem($hwnd,10015) -eq [IntPtr]::Zero) { throw 'New row did not scroll into view' }
     $null = [ThemeWindow]::SendMessage($hwnd,0x115,[IntPtr]0,[ThemeWindow]::GetDlgItem($hwnd,500))
     if ([ThemeWindow]::GetDlgItem($hwnd,10003) -eq [IntPtr]::Zero) { throw 'Mapping scrollbar did not scroll back' }
+    # Launch a known test executable from a Unicode path, with its own folder
+    # as the working directory. The actual Warcraft game is never run in CI.
+    $gameFolder=Join-Path $root 'Warcraft 游戏'
+    $null=New-Item -ItemType Directory -Path $gameFolder
+    $gamePath=Join-Path $gameFolder 'war3.exe'
+    Copy-Item -LiteralPath (Join-Path (Split-Path $source) 'update_test_payload.exe') -Destination $gamePath
+    $null=[ThemeWindow]::SetControlText([ThemeWindow]::GetDlgItem($hwnd,504),$gamePath)
+    $null=[ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]506,[IntPtr]::Zero)
+    $deadline=[DateTime]::UtcNow.AddSeconds(5)
+    while (!(Test-Path -LiteralPath (Join-Path $gameFolder 'working-directory.txt'))) {
+        if ([DateTime]::UtcNow -gt $deadline) { throw 'Warcraft launch action did not start the selected executable' }
+        Start-Sleep -Milliseconds 50
+    }
+    if ([IO.File]::ReadAllText((Join-Path $gameFolder 'working-directory.txt')) -cne $gameFolder) { throw 'Warcraft launch used the wrong working directory' }
     # Save two independent Quick Chat slots and reopen to check persistence.
     $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]121,[IntPtr]::Zero)
     $chat = [ThemeWindow]::FindWindow('MagicKey.QuickChat','Quick Chat Settings')
@@ -397,6 +428,8 @@ try {
     $process = Start-MagicKey
     $hwnd = $process.MainWindowHandle
     $null = [ThemeWindow]::SendMessage($hwnd,0x8005,[IntPtr]::Zero,[IntPtr]::Zero)
+    $null=[ThemeWindow]::GetControlText([ThemeWindow]::GetDlgItem($hwnd,504),$caption.Clear(),256)
+    if ($caption.ToString() -cne $gamePath) { throw 'Warcraft executable path lost after restart' }
     if ([ThemeWindow]::SendMessage([ThemeWindow]::GetDlgItem($hwnd,502),0x400,[IntPtr]::Zero,[IntPtr]::Zero).ToInt32() -ne 180) { throw 'Sequential speed lost after restart' }
     if ([ThemeWindow]::GetDlgItem($hwnd,20010) -eq [IntPtr]::Zero) { throw 'Long combination navigation lost after restart' }
     $null = [ThemeWindow]::GetWindowText([ThemeWindow]::GetDlgItem($hwnd,20002),$caption.Clear(),256)

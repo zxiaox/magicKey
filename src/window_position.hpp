@@ -26,13 +26,22 @@ inline LRESULT CALLBACK centerDialogHook(int code, WPARAM w, LPARAM l) {
     }
     return CallNextHookEx(dialogCenterContext ? dialogCenterContext->hook : nullptr,code,w,l);
 }
+class DialogCenterScope {
+    DialogCenterContext context;
+public:
+    explicit DialogCenterScope(HWND owner) : context{owner,nullptr,dialogCenterContext} {
+        dialogCenterContext=&context;
+        context.hook=SetWindowsHookExW(WH_CBT,centerDialogHook,nullptr,GetCurrentThreadId());
+    }
+    ~DialogCenterScope() {
+        if (context.hook) UnhookWindowsHookEx(context.hook);
+        dialogCenterContext=context.previous;
+    }
+    DialogCenterScope(const DialogCenterScope&)=delete;
+    DialogCenterScope& operator=(const DialogCenterScope&)=delete;
+};
 inline int centeredMessageBox(HWND owner, const wchar_t* text, const wchar_t* title, UINT flags) {
-    DialogCenterContext context{owner,nullptr,dialogCenterContext};
-    dialogCenterContext=&context;
-    context.hook=SetWindowsHookExW(WH_CBT,centerDialogHook,nullptr,GetCurrentThreadId());
-    int result=MessageBoxW(owner,text,title,flags);
-    if (context.hook) UnhookWindowsHookEx(context.hook);
-    dialogCenterContext=context.previous;
-    return result;
+    DialogCenterScope center(owner);
+    return MessageBoxW(owner,text,title,flags);
 }
 }
