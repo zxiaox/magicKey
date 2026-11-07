@@ -136,7 +136,8 @@ function Close-Popup($popup) {
 }
 function Close-MagicKey($p) {
     # Owned dialogs can change Process.MainWindowHandle; close the known root.
-    $main=[ThemeWindow]::FindWindow('mywarkey.Portable.Window',$null)
+    $main=[ThemeWindow]::FindWindow('mywarkey.Portable.Window','MagicKey')
+    if ($main -eq [IntPtr]::Zero) { throw 'Cannot find MagicKey main window for closing' }
     $null=[ThemeWindow]::SendMessage($main,0x112,[IntPtr]0xF060,[IntPtr]::Zero)
     if (!$p.WaitForExit(5000)) {
         Write-Host ([ThemeWindow]::DumpWindows($p.Id))
