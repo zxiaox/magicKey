@@ -43,6 +43,27 @@ public static class ThemeWindow {
             finally { PropVariantClear(ref value); }
         } finally { Marshal.ReleaseComObject(store); }
     }
+    private delegate bool EnumProc(IntPtr h,IntPtr l);
+    [DllImport("user32.dll")] private static extern bool EnumWindows(EnumProc callback,IntPtr l);
+    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr h,out uint pid);
+    [DllImport("user32.dll")] private static extern bool IsWindowEnabled(IntPtr h);
+    [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr h);
+    [DllImport("user32.dll",CharSet=CharSet.Unicode)] private static extern int GetClassName(IntPtr h,System.Text.StringBuilder text,int count);
+    [DllImport("user32.dll",CharSet=CharSet.Unicode)] private static extern int GetMenuString(IntPtr h,uint item,System.Text.StringBuilder text,int count,uint flags);
+    public static string DumpWindows(int process) {
+        var output=new System.Text.StringBuilder();
+        EnumWindows((h,l)=> {
+            uint pid; GetWindowThreadProcessId(h,out pid);
+            if (pid==process) {
+                var title=new System.Text.StringBuilder(512); var kind=new System.Text.StringBuilder(128); var menu=new System.Text.StringBuilder(128);
+                GetWindowText(h,title,512); GetClassName(h,kind,128);
+                GetMenuString(GetSubMenu(GetMenu(h),0),116,menu,128,0);
+                output.AppendLine("Window="+h+" class="+kind+" visible="+IsWindowVisible(h)+" enabled="+IsWindowEnabled(h)+" title="+title+" update="+menu);
+            }
+            return true;
+        },IntPtr.Zero);
+        return output.ToString();
+    }
     [StructLayout(LayoutKind.Sequential)] public struct Rect { public int Left, Top, Right, Bottom; }
     [StructLayout(LayoutKind.Sequential)] public struct Point { public int X, Y; }
     [DllImport("user32.dll")] public static extern bool SystemParametersInfo(uint action, uint parameter, out Rect value, uint flags);
@@ -108,7 +129,11 @@ function Close-MagicKey($p) {
     # Owned dialogs can change Process.MainWindowHandle; close the known root.
     $main=[ThemeWindow]::FindWindow('mywarkey.Portable.Window',$null)
     $null=[ThemeWindow]::PostMessage($main,0x10,[IntPtr]::Zero,[IntPtr]::Zero)
-    if (!$p.WaitForExit(45000) -or $p.ExitCode -ne 0) { throw 'MagicKey did not close cleanly' }
+    if (!$p.WaitForExit(5000)) {
+        Write-Host ([ThemeWindow]::DumpWindows($p.Id))
+        if (!$p.WaitForExit(40000)) { Write-Host ([ThemeWindow]::DumpWindows($p.Id)); throw 'MagicKey did not close cleanly' }
+    }
+    if ($p.ExitCode -ne 0) { throw "MagicKey exited with code $($p.ExitCode)" }
 }
 try {
     $cases = @(@(0,0,'ivory'), @(1,0,'midnight'), @(2,0,'arcane'), @(3,0,'warcraft-iii'), @(3,1,'warcraft-iii-zh'), @(3,2,'warcraft-iii-ja'), @(3,3,'warcraft-iii-ko'))
