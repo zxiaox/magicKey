@@ -124,7 +124,7 @@ function Assert-Centered($popup,$parent) {
     $expectedY=[Math]::Floor(($owner.Top+$owner.Bottom-$height)/2)
     $expectedX=[Math]::Max($work.Left,[Math]::Min($expectedX,[Math]::Max($work.Left,$work.Right-$width)))
     $expectedY=[Math]::Max($work.Top,[Math]::Min($expectedY,[Math]::Max($work.Top,$work.Bottom-$height)))
-    if ([Math]::Abs($box.Left-$expectedX) -gt 1 -or [Math]::Abs($box.Top-$expectedY) -gt 1) { throw 'Popup is not centered over MagicKey' }
+    if ([Math]::Abs($box.Left-$expectedX) -gt 1 -or [Math]::Abs($box.Top-$expectedY) -gt 1) { throw "Popup is not centered over MagicKey: actual=$($box.Left),$($box.Top),$width,$height expected=$expectedX,$expectedY owner=$($owner.Left),$($owner.Top),$($owner.Right),$($owner.Bottom)" }
 }
 function Close-Popup($popup) {
     $null=[ThemeWindow]::SendMessage($popup,0x10,[IntPtr]::Zero,[IntPtr]::Zero)
