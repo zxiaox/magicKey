@@ -5,6 +5,7 @@
 #include <iterator>
 #include <mutex>
 #include <atomic>
+#include <cwchar>
 #include "core.hpp"
 #include "key_output.hpp"
 #include "localization.hpp"
@@ -25,6 +26,7 @@ constexpr int NumpadBase = 300;
 constexpr int MapRowBase = 10000, ComboRowBase = 20000, MapScroll = 500, ComboScroll = 501, SequenceSpeed = 502, SequenceValue = 503;
 constexpr int ComboStride = 11;
 constexpr int WarcraftPath = 504, WarcraftBrowse = 505, WarcraftLaunch = 506;
+constexpr int UsageTitle = 507, UsageValue = 508, ResetUsage = 509;
 HWND warcraftPathEdit;
 bool savingWarcraftPath=false;
 bool saveWarcraftPath();
@@ -64,6 +66,10 @@ bool hookInstalled = false;
 Settings settings;
 std::filesystem::path settingsPath;
 std::filesystem::path themePath;
+std::filesystem::path usagePath;
+HWND usageValue;
+std::uint64_t savedUsageMs = 0, usageStartedMs = 0, lastUsageCheckpointMs = 0;
+constexpr UINT_PTR UsageTimer = 78;
 bool enabled = true;
 bool inputFailed = false;
 std::mutex engineMutex;
@@ -98,6 +104,43 @@ std::string utf8(const std::wstring& text) {
     return out;
 }
 void error(const std::wstring& message) { magickey::centeredMessageBox(window, tr(message.c_str()), L"MagicKey", MB_OK | MB_ICONWARNING); }
+
+std::uint64_t awakeMilliseconds() {
+    ULONGLONG time = 0;
+    QueryUnbiasedInterruptTime(&time);
+    return time / 10000;
+}
+std::uint64_t usageMilliseconds(std::uint64_t now) {
+    return savedUsageMs + (now >= usageStartedMs ? now - usageStartedMs : 0);
+}
+bool saveUsage(std::uint64_t milliseconds) {
+    auto temporary = usagePath;
+    temporary += L".tmp";
+    std::ofstream output(temporary, std::ios::trunc);
+    output << milliseconds << '\n';
+    output.close();
+    return output && MoveFileExW(temporary.c_str(), usagePath.c_str(),
+        MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+}
+void refreshUsage(std::uint64_t now) {
+    wchar_t text[80]{};
+    std::swprintf(text, std::size(text), L"%.3f %ls", usageMilliseconds(now) / 3600000.0, tr(L"hours"));
+    SetWindowTextW(usageValue, text);
+}
+void resetUsage() {
+    const int answer = magickey::centeredMessageBox(window,
+        tr(L"Reset the accumulated software usage time?"), tr(L"Reset usage time"),
+        MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2);
+    if (answer != IDYES || !IsWindow(window)) return;
+    const auto now = awakeMilliseconds();
+    if (!saveUsage(0)) {
+        error(L"Could not save usage time. Check that the app folder is writable.");
+        return;
+    }
+    savedUsageMs = 0;
+    usageStartedMs = lastUsageCheckpointMs = now;
+    refreshUsage(now);
+}
 
 struct Key { int vk; std::wstring label; };
 std::vector<Key> keys;
@@ -402,6 +445,7 @@ void finishUpdate() {
 }
 void refresh() {
     for (const auto& entry : localizedControls) SetWindowTextW(entry.first, tr(entry.second.c_str()));
+    refreshUsage(awakeMilliseconds());
     refreshMenus();
     if (GetFocus()!=warcraftPathEdit) SetWindowTextW(warcraftPathEdit,wide(settings.warcraftPath).c_str());
     updateCaptureButtons();
@@ -549,6 +593,10 @@ bool saveRow(int id) {
     return true;
 }
 void makeInterface() {
+    control(L"STATIC", L"Software Usage Time", 0, UsageTitle, 600, 32, 176, 19);
+    usageValue = control(L"STATIC", L"", 0, UsageValue, 600, 53, 176, 21);
+    SendMessageW(usageValue, WM_SETFONT, WPARAM(font), TRUE);
+    control(L"BUTTON", L"Reset", WS_TABSTOP, ResetUsage, 784, 37, 76, 32);
     control(L"STATIC",L"Configuration Schemes",0,SectionProfile,44,108,230,20);
     profileBox = control(WC_COMBOBOXW,L"",CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP,ProfileBox,44,134,230,300);
     control(L"STATIC",L"Profile name",0,0,286,108,240,20);
@@ -803,6 +851,7 @@ void command(int id, int notification) {
         else { if (combinationRows.size() >= 100) return; combinationRows.push_back({}); comboOffset = std::max(0,int(combinationRows.size())-2); }
         renderRows(); return;
     }
+    if (id == ResetUsage) { resetUsage(); return; }
     if (id == WarcraftBrowse) { browseWarcraft(); return; }
     if (id == WarcraftLaunch) { launchWarcraft(); return; }
     if (id == QuickChatOpen) { openQuickChat(); return; }
@@ -848,7 +897,13 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
     static const UINT taskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
     if (message == taskbarCreated) { magickey::setWindowIdentity(hwnd); return 0; }
     switch (message) {
-        case WM_CREATE: window = hwnd; makeInterface(); SetTimer(hwnd, NotificationTimer, 25, nullptr); return 0;
+        case WM_CREATE:
+            window = hwnd;
+            usageStartedMs = lastUsageCheckpointMs = awakeMilliseconds();
+            makeInterface();
+            SetTimer(hwnd, NotificationTimer, 25, nullptr);
+            SetTimer(hwnd, UsageTimer, 1000, nullptr);
+            return 0;
         case WM_ERASEBKGND: return 1;
         case WM_PAINT: {
             PAINTSTRUCT paint;
@@ -1005,6 +1060,14 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
             return 0;
         }
         case WM_TIMER:
+            if (w == UsageTimer) {
+                const auto now = awakeMilliseconds();
+                refreshUsage(now);
+                if (now >= lastUsageCheckpointMs + 60000) {
+                    lastUsageCheckpointMs = now;
+                    saveUsage(usageMilliseconds(now));
+                }
+            }
             if (w == NotificationTimer) {
                 if (cancelNotification.exchange(false)) gameNotifications.cancel();
                 if (gameNotifications.readyToStart()) {
@@ -1027,8 +1090,10 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
             auto ink = child == statusLabel ? (enabled ? p.success : p.text) : p.muted;
             int id = GetDlgCtrlID(child);
             if (id == SectionProfile || id == SectionMappings) ink = p.accent;
+            if (id == UsageValue) ink = p.text;
             SetTextColor(reinterpret_cast<HDC>(w), magickey::color(ink));
             SetBkMode(reinterpret_cast<HDC>(w), TRANSPARENT);
+            if (id == UsageTitle || id == UsageValue) return LRESULT(themeUI.panel());
             return LRESULT(themeUI.staticBackground(child, hwnd));
         }
         case WM_CTLCOLORBTN:
@@ -1046,6 +1111,8 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
             } else DestroyWindow(hwnd);
             return 0;
         case WM_DESTROY:
+            KillTimer(hwnd, UsageTimer);
+            saveUsage(usageMilliseconds(awakeMilliseconds()));
             magickey::clearWindowIdentity(hwnd);
             KillTimer(hwnd, NotificationTimer); gameNotifications.cancel(); notificationTyping = false;
             cancelCapture();
@@ -1073,6 +1140,12 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     DWORD length = GetModuleFileNameW(nullptr, executable, DWORD(std::size(executable)));
     if (!length || length >= std::size(executable)) { CloseHandle(single); return 1; }
     settingsPath = std::filesystem::path(executable).parent_path() / L"mywarkey.profiles";
+    usagePath = settingsPath.parent_path() / L"MagicKey.usage";
+    {
+        std::ifstream input(usagePath);
+        std::int64_t milliseconds = 0;
+        if (input >> milliseconds && milliseconds >= 0) savedUsageMs = milliseconds;
+    }
     if (std::filesystem::exists(settingsPath)) {
         try {
             std::ifstream in(settingsPath, std::ios::binary);

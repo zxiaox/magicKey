@@ -4,6 +4,12 @@
 namespace mywarkey {
 struct Translation { const wchar_t *en, *zh, *ja, *ko; };
 inline constexpr Translation translations[] = {
+    {L"Software Usage Time", L"软件使用时长", L"ソフトの使用時間", L"소프트웨어 사용 시간"},
+    {L"hours", L"小时", L"時間", L"시간"},
+    {L"Reset", L"重置", L"リセット", L"초기화"},
+    {L"Reset usage time", L"重置使用时长", L"使用時間をリセット", L"사용 시간 초기화"},
+    {L"Reset the accumulated software usage time?", L"要重置累计软件使用时长吗？", L"累積使用時間をリセットしますか？", L"누적 소프트웨어 사용 시간을 초기화할까요?"},
+    {L"Could not save usage time. Check that the app folder is writable.", L"无法保存使用时长，请检查软件文件夹是否可写。", L"使用時間を保存できません。アプリのフォルダーに書き込めるか確認してください。", L"사용 시간을 저장할 수 없습니다. 앱 폴더에 쓰기 권한이 있는지 확인하세요."},
     {L"Select war3.exe", L"选择 war3.exe", L"war3.exe を選択", L"war3.exe 선택"},
     {L"Browse...", L"浏览…", L"参照…", L"찾아보기…"},
     {L"Launch", L"启动", L"起動", L"실행"},

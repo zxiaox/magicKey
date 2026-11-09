@@ -151,6 +151,7 @@ void ThemeUI::paint(HDC dc, const RECT& bounds, bool enabled, int language, bool
             }
         }
     }
+    roundBox(dc, {584,24,876,82}, p.panel, p.border, selected == ThemeId::Warcraft ? 3 : 12);
     auto icon = static_cast<HICON>(LoadImageW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(101), IMAGE_ICON, 52, 52, LR_SHARED));
     if (icon) DrawIconEx(dc, 27, 24, icon, 52, 52, 0, nullptr, DI_NORMAL);
     text(dc, L"MagicKey", {92,23,360,61}, headingFont, selected == ThemeId::Warcraft ? p.accent : p.text);

@@ -146,6 +146,8 @@ function Close-MagicKey($p) {
     if ($p.ExitCode -ne 0) { throw "MagicKey exited with code $($p.ExitCode)" }
 }
 try {
+    $usageFile = Join-Path $root 'MagicKey.usage'
+    [IO.File]::WriteAllText($usageFile, '7200000')
     $cases = @(@(0,0,'ivory'), @(1,0,'midnight'), @(2,0,'arcane'), @(3,0,'warcraft-iii'), @(3,1,'warcraft-iii-zh'), @(3,2,'warcraft-iii-ja'), @(3,3,'warcraft-iii-ko'))
     foreach ($case in $cases) {
         $theme = $case[0]
@@ -472,7 +474,36 @@ try {
     foreach ($n in 1..2) { $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]20010,[IntPtr]::Zero) }
     $null = [ThemeWindow]::GetWindowText([ThemeWindow]::GetDlgItem($hwnd,20003),$caption.Clear(),256)
     if ($caption.ToString() -cne 'G') { throw 'Tail slot lost after restart' }
+    $usageValue = [ThemeWindow]::GetDlgItem($hwnd,508)
+    $null = [ThemeWindow]::GetWindowText($usageValue,$caption.Clear(),256)
+    if ($caption.ToString() -notmatch '^2\.\d{3} hours$') { throw "Saved hours were not displayed: $caption" }
+    foreach ($answer in 7,6) {
+        $null = [ThemeWindow]::PostMessage($hwnd,0x111,[IntPtr]509,[IntPtr]::Zero)
+        $deadline = [DateTime]::UtcNow.AddSeconds(5)
+        do {
+            Start-Sleep -Milliseconds 50
+            $dialog = [ThemeWindow]::FindWindow('#32770','Reset usage time')
+        } while ($dialog -eq [IntPtr]::Zero -and [DateTime]::UtcNow -lt $deadline)
+        if ($dialog -eq [IntPtr]::Zero) { throw 'Usage reset confirmation did not open' }
+        $button = [ThemeWindow]::GetDlgItem($dialog,$answer)
+        $null = [ThemeWindow]::PostMessage($dialog,0x111,[IntPtr]$answer,$button)
+        while ([ThemeWindow]::IsWindow($dialog)) {
+            if ([DateTime]::UtcNow -gt $deadline) { throw 'Usage reset confirmation did not close' }
+            Start-Sleep -Milliseconds 50
+        }
+        if ($answer -eq 7 -and [long][IO.File]::ReadAllText($usageFile) -lt 7200000) {
+            throw 'Declining reset cleared the usage total'
+        }
+    }
+    do {
+        Start-Sleep -Milliseconds 50
+        $savedUsage = [long][IO.File]::ReadAllText($usageFile)
+    } while ($savedUsage -ne 0 -and [DateTime]::UtcNow -lt $deadline)
+    if ($savedUsage -ne 0) { throw 'Confirmed reset did not save a zero total' }
+    Start-Sleep -Milliseconds 1100
     Close-MagicKey $process
+    $savedUsage = [long][IO.File]::ReadAllText($usageFile)
+    if ($savedUsage -le 0 -or $savedUsage -ge 7200000) { throw 'Usage did not resume counting after reset' }
     $process = $null
     Write-Host 'PASS: ten profile shortcut slots enable and persist; invalid slot ignored.'
 } finally {
