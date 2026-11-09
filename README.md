@@ -41,7 +41,7 @@ Download **MagicKey-windows-x64-portable.zip** from [GitHub Releases](https://gi
 
 A release must first be published by the workflow below before the download links or in-app checks can return an executable. This source tree alone is not a published GitHub release.
 
-The app displays **MagicKey v1.12.0** in its heading. Windows file properties also contain the product name and version, generated from the single version in `CMakeLists.txt`.
+The app displays **MagicKey v1.12.1** in its heading. Windows file properties also contain the product name and version, generated from the single version in `CMakeLists.txt`.
 
 ## Build and publish (maintainers)
 
@@ -54,8 +54,8 @@ To publish a stable release:
 
    ```sh
    git push origin main
-   git tag v1.12.0
-   git push origin v1.12.0
+   git tag v1.12.1
+   git push origin v1.12.1
    ```
 
 3. Open **Actions → Build and release MagicKey**. After compilation, tests, and packaging succeed, the tag run creates a draft release with all four download assets, then publishes it as the latest stable release. A tag that differs from the compiled version fails before publication. Branch and pull-request runs never publish releases.
@@ -73,7 +73,7 @@ If double-clicking an older script seems to do nothing, run it from Command Prom
 
 ## In-app updates
 
-Click **Settings → Check for updates**. MagicKey requests `https://api.github.com/repos/zxiaox/magicKey/releases/latest` in a background worker, compares numeric stable versions (1.12.0 is newer than 1.9.0), and reports whether a newer release exists. The same check runs automatically at startup; current-version and failure results stay quiet for automatic checks. Explicit checks report a missing public release, invalid metadata, connection failure, or GitHub rate limit separately from being up to date.
+Click **Settings → Check for updates**. MagicKey requests `https://api.github.com/repos/zxiaox/magicKey/releases/latest` in a background worker, compares numeric stable versions (1.12.1 is newer than 1.9.0), and reports whether a newer release exists. The same check runs automatically at startup; current-version and failure results stay quiet for automatic checks. Explicit checks report a missing public release, invalid metadata, connection failure, or GitHub rate limit separately from being up to date.
 
 When an update is available, approve **Download and install**. MagicKey downloads only this repository's `MagicKey.exe` release asset over HTTPS, accepts redirects only to GitHub's asset hosts, checks the exact file length and Windows x64 PE header, and verifies SHA-256 against GitHub's asset digest and the attached `MagicKey.exe.sha256` when available. A release must provide a digest or checksum. A checksum checks the asset against release metadata; it is not a publisher code signature or protection against a compromised repository account.
 

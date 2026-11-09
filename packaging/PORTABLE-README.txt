@@ -1,4 +1,4 @@
-MagicKey v1.12.0 - portable keyboard remapper for Windows 10/11 x64
+MagicKey v1.12.1 - portable keyboard remapper for Windows 10/11 x64
 https://github.com/zxiaox/magicKey
 
 Run MagicKey.exe from a writable folder. No installation, Visual Studio, CMake,
