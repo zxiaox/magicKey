@@ -1,7 +1,7 @@
-# MagicKey v1.12.1
+# MagicKey v1.13.0
 
-The top-right **Software Usage Time** counter shows total hours across sessions. It counts while MagicKey is minimized or remapping is paused and excludes time when Windows is asleep.
+**Hero Mana…** next to the Warcraft III launcher checks the local game build and lets you turn overhead hero mana bars on or off in a saved Warcraft Feature Extender (WFE) profile. The app recognizes Classic patches **1.24e, 1.26a, 1.27a (1.27.0.52240), and 1.27b**.
 
-Choose **Reset** and confirm to clear the total. MagicKey stores the counter in `MagicKey.usage` beside the executable.
+The bars are drawn by WFE, available as a separate download. Save a profile in WFE and close it. In MagicKey, select the Warcraft III executable, click **Hero Mana…**, and choose the saved profile. Reopen WFE and launch the game with **Auto-inject** enabled. Windows tests cover version detection and profile updates. In-game rendering still needs testing. [Download WFE](https://github.com/UnryzeC/WFE-Release/releases)
 
-Download MagicKey.exe or the portable ZIP, or use Settings → Check for updates.
+Use **Settings → Check for updates** or download the Windows portable ZIP below.
