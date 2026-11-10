@@ -17,6 +17,7 @@
 #include "theme_ui.hpp"
 #include "app_identity.hpp"
 #include "window_position.hpp"
+#include "warcraft_mana.hpp"
 
 using namespace mywarkey;
 constexpr UINT ToggleMessage = WM_APP + 1, InputError = WM_APP + 2, CapturedKey = WM_APP + 3, UpdateFinished = WM_APP + 4, ProfileSwitch = WM_APP + 5, QuickChatSend = WM_APP + 6;
@@ -27,6 +28,7 @@ constexpr int MapRowBase = 10000, ComboRowBase = 20000, MapScroll = 500, ComboSc
 constexpr int ComboStride = 11;
 constexpr int WarcraftPath = 504, WarcraftBrowse = 505, WarcraftLaunch = 506;
 constexpr int UsageTitle = 507, UsageValue = 508, ResetUsage = 509;
+constexpr int WarcraftMana = 510;
 HWND warcraftPathEdit;
 bool savingWarcraftPath=false;
 bool saveWarcraftPath();
@@ -627,10 +629,11 @@ void makeInterface() {
     SendMessageW(speed,TBM_SETPAGESIZE,0,10);
     control(L"STATIC",L"",0,SequenceValue,680,574,174,20);
     control(L"STATIC",L"Warcraft III",0,0,44,620,112,20);
-    warcraftPathEdit=control(L"EDIT",L"",WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP,WarcraftPath,160,614,450,28);
+    warcraftPathEdit=control(L"EDIT",L"",WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP,WarcraftPath,160,614,318,28);
     SendMessageW(warcraftPathEdit,EM_SETLIMITTEXT,32767,0);
     SendMessageW(warcraftPathEdit,EM_SETCUEBANNER,TRUE,LPARAM(tr(L"Select war3.exe")));
-    control(L"BUTTON",L"Browse...",WS_TABSTOP,WarcraftBrowse,622,612,96,32);
+    control(L"BUTTON",L"Browse...",WS_TABSTOP,WarcraftBrowse,490,612,96,32);
+    control(L"BUTTON",L"Hero Mana...",WS_TABSTOP,WarcraftMana,598,612,120,32);
     control(L"BUTTON",L"Launch",WS_TABSTOP,WarcraftLaunch,730,612,124,32);
     statusLabel = control(L"STATIC",L"",0,0,58,664,320,22);
     SendMessageW(statusLabel,WM_SETFONT,WPARAM(font),TRUE);
@@ -689,6 +692,67 @@ void launchWarcraft() {
         error(L"Could not launch Warcraft III. Check the selected executable and its permissions."); return;
     }
     CloseHandle(process.hThread); CloseHandle(process.hProcess);
+}
+
+void configureWarcraftMana() {
+    const auto title = tr(L"Hero Mana...");
+    std::error_code problem;
+    auto exe = std::filesystem::absolute(enteredWarcraftPath(), problem);
+    if (problem || !std::filesystem::is_regular_file(exe, problem) || _wcsicmp(exe.extension().c_str(), L".exe") != 0) {
+        error(L"Select an existing Warcraft III executable (.exe).");
+        return;
+    }
+    const auto version = magickey::warcraftVersion(exe.parent_path() / L"Game.dll");
+    if (!version) {
+        error(L"Could not read the version of Game.dll beside the selected executable.");
+        return;
+    }
+    std::wstring prompt = L"Game.dll ";
+    for (unsigned i = 0; i < version->size(); ++i) {
+        if (i != 0) prompt += L'.';
+        prompt += std::to_wstring((*version)[i]);
+    }
+    prompt += L"\n\n";
+    if (!magickey::supportsWarcraftMana(*version)) {
+        prompt += tr(L"Hero mana bars are unavailable for this build. Supported WFE patches: 1.24e, 1.26a, 1.27a, 1.27b.");
+        magickey::centeredMessageBox(window, prompt.c_str(), title, MB_OK | MB_ICONINFORMATION);
+        return;
+    }
+    prompt += tr(L"This build is supported by Warcraft Feature Extender (WFE). Save a profile in WFE, then close WFE and Warcraft III. Choose the saved profile now?");
+    if (magickey::centeredMessageBox(window, prompt.c_str(), title, MB_YESNO | MB_ICONINFORMATION) != IDYES) return;
+
+    std::array<wchar_t, 32768> path{};
+    OPENFILENAMEW file{sizeof(file)};
+    file.hwndOwner = window;
+    file.lpstrFilter = L"WFE (*.ini)\0*.ini\0\0";
+    file.lpstrFile = path.data();
+    file.nMaxFile = DWORD(path.size());
+    file.lpstrTitle = tr(L"Select a saved WFE profile");
+    file.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_DONTADDTORECENT;
+    {
+        magickey::DialogCenterScope center(window);
+        if (!GetOpenFileNameW(&file)) {
+            if (CommDlgExtendedError()) error(L"Could not open the profile picker.");
+            return;
+        }
+    }
+
+    const std::filesystem::path profile(path.data());
+    const auto enabled = magickey::wfeHeroManaEnabled(profile);
+    if (_wcsicmp(profile.extension().c_str(), L".ini") != 0 || !enabled.has_value()) {
+        error(L"This file does not contain the expected WFE mana bar settings.");
+        return;
+    }
+    prompt = profile.filename().wstring() + L"\n\n";
+    prompt += tr(*enabled ? L"Turn off mana bars in this WFE profile?" : L"Turn on overhead mana bars for heroes in this WFE profile?");
+    if (magickey::centeredMessageBox(window, prompt.c_str(), title, MB_YESNO | MB_DEFBUTTON2 | MB_ICONQUESTION) != IDYES) return;
+    if (!magickey::saveWfeHeroMana(profile, !*enabled)) {
+        error(L"Could not save the WFE profile. Check that its folder is writable and WFE is closed.");
+        return;
+    }
+    magickey::centeredMessageBox(window,
+        tr(L"Profile saved. Reopen WFE, select this profile, and launch Warcraft III from WFE with Auto-inject enabled."),
+        title, MB_OK | MB_ICONINFORMATION);
 }
 
 void loadQuickChatSlot(bool loadText = true) {
@@ -854,6 +918,7 @@ void command(int id, int notification) {
     if (id == ResetUsage) { resetUsage(); return; }
     if (id == WarcraftBrowse) { browseWarcraft(); return; }
     if (id == WarcraftLaunch) { launchWarcraft(); return; }
+    if (id == WarcraftMana) { configureWarcraftMana(); return; }
     if (id == QuickChatOpen) { openQuickChat(); return; }
     if (id == NotificationDiagnostics) { magickey::centeredMessageBox(window, gameNotifications.diagnostics().c_str(), tr(L"Notification diagnostics"), MB_OK | MB_ICONINFORMATION); return; }
     if (id == CheckUpdates) { beginUpdateCheck(); return; }
