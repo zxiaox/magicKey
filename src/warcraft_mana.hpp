@@ -47,17 +47,44 @@ inline std::optional<bool> wfeHeroManaEnabled(const std::filesystem::path& profi
     return _wcsicmp(bars, L"yes") == 0 && _wcsicmp(mana, L"yes") == 0 && _wcsicmp(heroes, L"On") == 0;
 }
 
-inline bool saveWfeHeroMana(const std::filesystem::path& profile, bool enabled) {
-    if (!wfeHeroManaEnabled(profile).has_value()) return false;
+inline std::optional<std::filesystem::path> activeWfeProfile(const std::filesystem::path& app) {
+    std::error_code problem;
+    if (_wcsicmp(app.filename().c_str(), L"WFEApp.exe") != 0 || !std::filesystem::is_regular_file(app, problem))
+        return std::nullopt;
+    const auto folder = app.parent_path();
+    const auto settings = folder / L"WFESettings.ini";
+    if (!std::filesystem::is_regular_file(settings, problem) ||
+        !std::filesystem::is_directory(folder / L"Profiles", problem))
+        return std::nullopt;
+    wchar_t name[MAX_PATH]{};
+    const DWORD length = GetPrivateProfileStringW(L"SELECTED", L"FILE", L"", name, MAX_PATH, settings.c_str());
+    const std::wstring profileName(name, length);
+    if (!length || length >= MAX_PATH - 1 || profileName.find_first_of(L"<>:\"/\\|?*") != std::wstring::npos ||
+        _wcsicmp(std::filesystem::path(profileName).extension().c_str(), L".ini") != 0)
+        return std::nullopt;
+    return folder / L"Profiles" / profileName;
+}
+
+inline bool saveWfeHeroMana(const std::filesystem::path& profile, bool enabled,
+                           const std::filesystem::path& seed = {}) {
+    const DWORD attributes = GetFileAttributesW(profile.c_str());
+    const bool exists = attributes != INVALID_FILE_ATTRIBUTES;
+    if ((exists && (attributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_REPARSE_POINT))) ||
+        (!exists && GetLastError() != ERROR_FILE_NOT_FOUND))
+        return false;
     wchar_t temp[MAX_PATH]{};
     if (!GetTempFileNameW(profile.parent_path().c_str(), L"MKH", 0, temp)) return false;
-    bool saved = CopyFileW(profile.c_str(), temp, FALSE) &&
-        WritePrivateProfileStringW(L"MANABAR", L"ISENABLED", enabled ? L"yes" : L"no", temp);
+    const auto& source = exists ? profile : seed;
+    bool saved = (source.empty() || CopyFileW(source.c_str(), temp, FALSE)) &&
+                 WritePrivateProfileStringW(L"MANABAR", L"ISENABLED", enabled ? L"yes" : L"no", temp);
     if (saved && enabled) {
         saved = WritePrivateProfileStringW(L"CUSTOMBARS", L"ISENABLED", L"yes", temp) &&
                 WritePrivateProfileStringW(L"MANABAR", L"ISHEROONLY", L"On", temp);
     }
-    if (saved) saved = MoveFileExW(temp, profile.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+    if (saved) {
+        const DWORD flags = exists ? MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH : MOVEFILE_WRITE_THROUGH;
+        saved = MoveFileExW(temp, profile.c_str(), flags);
+    }
     if (!saved) DeleteFileW(temp);
     return saved;
 }

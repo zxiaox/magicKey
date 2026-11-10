@@ -718,40 +718,45 @@ void configureWarcraftMana() {
         magickey::centeredMessageBox(window, prompt.c_str(), title, MB_OK | MB_ICONINFORMATION);
         return;
     }
-    prompt += tr(L"This build is supported by Warcraft Feature Extender (WFE). Save a profile in WFE, then close WFE and Warcraft III. Choose the saved profile now?");
+    const auto gameConfig = exe.parent_path() / L"WFEConfig.ini";
+    prompt += tr(L"This build supports WFE. Close Warcraft III and WFE, then select WFEApp.exe from the extracted WFE folder. Continue?");
     if (magickey::centeredMessageBox(window, prompt.c_str(), title, MB_YESNO | MB_ICONINFORMATION) != IDYES) return;
 
     std::array<wchar_t, 32768> path{};
     OPENFILENAMEW file{sizeof(file)};
     file.hwndOwner = window;
-    file.lpstrFilter = L"WFE (*.ini)\0*.ini\0\0";
+    file.lpstrFilter = L"Warcraft Feature Extender (WFEApp.exe)\0WFEApp.exe\0\0";
     file.lpstrFile = path.data();
     file.nMaxFile = DWORD(path.size());
-    file.lpstrTitle = tr(L"Select a saved WFE profile");
+    file.lpstrTitle = tr(L"Select WFEApp.exe");
     file.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_DONTADDTORECENT;
     {
         magickey::DialogCenterScope center(window);
         if (!GetOpenFileNameW(&file)) {
-            if (CommDlgExtendedError()) error(L"Could not open the profile picker.");
+            if (CommDlgExtendedError()) error(L"Could not open the executable picker.");
             return;
         }
     }
 
-    const std::filesystem::path profile(path.data());
-    const auto enabled = magickey::wfeHeroManaEnabled(profile);
-    if (_wcsicmp(profile.extension().c_str(), L".ini") != 0 || !enabled.has_value()) {
-        error(L"This file does not contain the expected WFE mana bar settings.");
+    const auto profile = magickey::activeWfeProfile(std::filesystem::path(path.data()));
+    if (!profile) {
+        error(L"Could not find the active WFE profile. Extract the complete WFE ZIP and select its WFEApp.exe.");
         return;
     }
-    prompt = profile.filename().wstring() + L"\n\n";
-    prompt += tr(*enabled ? L"Turn off mana bars in this WFE profile?" : L"Turn on overhead mana bars for heroes in this WFE profile?");
+    const bool enabled = magickey::wfeHeroManaEnabled(gameConfig).value_or(false);
+    prompt = gameConfig.wstring() + L"\n" + profile->wstring() + L"\n\n";
+    prompt += tr(enabled ? L"Turn off hero mana bars in these WFE settings?" : L"Turn on overhead mana bars for heroes in these WFE settings?");
     if (magickey::centeredMessageBox(window, prompt.c_str(), title, MB_YESNO | MB_DEFBUTTON2 | MB_ICONQUESTION) != IDYES) return;
-    if (!magickey::saveWfeHeroMana(profile, !*enabled)) {
+    if (!magickey::saveWfeHeroMana(*profile, !enabled)) {
         error(L"Could not save the WFE profile. Check that its folder is writable and WFE is closed.");
         return;
     }
+    if (!magickey::saveWfeHeroMana(gameConfig, !enabled, *profile)) {
+        error(L"The WFE profile was saved, but WFEConfig.ini could not be written to the Warcraft III folder. Check its permissions and try again.");
+        return;
+    }
     magickey::centeredMessageBox(window,
-        tr(L"Profile saved. Reopen WFE, select this profile, and launch Warcraft III from WFE with Auto-inject enabled."),
+        tr(L"WFE settings saved in both folders. Open WFE and launch Warcraft III with Auto-inject enabled."),
         title, MB_OK | MB_ICONINFORMATION);
 }
 
