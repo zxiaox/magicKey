@@ -410,6 +410,23 @@ try {
         Start-Sleep -Milliseconds 50
     }
     if ([IO.File]::ReadAllText((Join-Path $gameFolder 'working-directory.txt')) -cne $gameFolder) { throw 'Warcraft launch used the wrong working directory' }
+    # A fixture supplies the 1.27a version resource without installing Warcraft.
+    Copy-Item -LiteralPath (Join-Path (Split-Path $source) 'warcraft_mana_tests.exe') -Destination (Join-Path $gameFolder 'Game.dll')
+    $mana = [ThemeWindow]::GetDlgItem($hwnd,511)
+    if ($mana -eq [IntPtr]::Zero) { throw 'Hero mana checkbox missing' }
+    $mix = Join-Path $gameFolder 'MagicKeyMana.mix'
+    $null = [ThemeWindow]::SendMessage($mana,0xF1,[IntPtr]1,[IntPtr]::Zero) # BM_SETCHECK
+    $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]511,$mana)
+    $module = [IO.File]::ReadAllBytes($mix)
+    $pe = [BitConverter]::ToInt32($module,0x3c)
+    if ([BitConverter]::ToUInt32($module,$pe) -ne 0x4550 -or
+        [BitConverter]::ToUInt16($module,$pe+4) -ne 0x14c -or
+        ([BitConverter]::ToUInt16($module,$pe+22) -band 0x2000) -eq 0) {
+        throw 'MagicKey did not install an embedded 32-bit DLL'
+    }
+    $null = [ThemeWindow]::SendMessage($mana,0xF1,[IntPtr]::Zero,[IntPtr]::Zero)
+    $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]511,$mana)
+    if (Test-Path -LiteralPath $mix) { throw 'Unchecking hero mana did not remove the plugin' }
     # Save two independent Quick Chat slots and reopen to check persistence.
     $null = [ThemeWindow]::SendMessage($hwnd,0x111,[IntPtr]121,[IntPtr]::Zero)
     $chat = [ThemeWindow]::FindWindow('MagicKey.QuickChat','Quick Chat Settings')
