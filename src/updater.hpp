@@ -11,26 +11,31 @@ namespace magickey::updates {
 enum class Failure { Network, NoRelease, RateLimit, InvalidRelease, InvalidDownload, Checksum,
     NotWritable, Install, Cancelled };
 const wchar_t* failureMessage(Failure failure);
-enum class Outcome { Current, Available, Downloaded, Failed, Cancelled };
+enum class Outcome { Current, Available, Downloaded, WfeInstalled, Failed, Cancelled };
 struct Result {
     Outcome outcome = Outcome::Failed;
     Failure failure = Failure::Network;
     Release release;
     std::filesystem::path staging;
+    std::filesystem::path wfeApp;
     std::string hash;
 };
 class Client {
+    enum class Job { Check, Update, InstallWfe };
     std::thread worker;
     std::atomic<bool> cancelled{false}, running{false};
     std::mutex resultMutex;
     Result result;
-    void start(HWND window, UINT message, Release release, bool downloading);
+    void start(HWND window, UINT message, Job job, Release release, std::filesystem::path wfeFolder = {});
 public:
     ~Client();
     bool busy() const { return running.load(); }
     void cancel() { cancelled = true; }
-    void check(HWND window, UINT message) { start(window, message, {}, false); }
-    void download(HWND window, UINT message, Release release) { start(window, message, std::move(release), true); }
+    void check(HWND window, UINT message) { start(window, message, Job::Check, {}); }
+    void download(HWND window, UINT message, Release release) { start(window, message, Job::Update, std::move(release)); }
+    void installWfe(HWND window, UINT message, const std::filesystem::path& folder) {
+        start(window, message, Job::InstallWfe, {}, folder);
+    }
     Result take();
 };
 std::filesystem::path executablePath();

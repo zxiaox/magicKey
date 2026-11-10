@@ -31,8 +31,8 @@ The app recognizes `War3.exe`, `Warcraft III.exe`, and `Warcraft III Reforged.ex
 
 **Hero Mana…** next to the Warcraft III launcher reads the local `Game.dll` version and reports whether the build is supported. This integration recognizes **1.24e** (1.24.4.6387), **1.26a** (1.26.0.6401), **1.27a** (1.27.0.52240), and **1.27b** (1.27.1.7085). Other builds are unavailable through this integration.
 
-1. Download [Warcraft Feature Extender (WFE)](https://github.com/UnryzeC/WFE-Release/releases) and extract it into its own folder. Close Warcraft III and WFE before changing the settings.
-2. Select your Warcraft III executable in MagicKey. Click **Hero Mana…**, select the extracted `WFEApp.exe`, and confirm. MagicKey configures WFE's active profile automatically and writes `WFEConfig.ini` next to the selected game executable. For example, `D:\play\war3\war3.exe` produces `D:\play\war3\WFEConfig.ini`. Other settings in either file are preserved.
+1. Close Warcraft III and WFE, select the Warcraft III executable in MagicKey, and click **Hero Mana…**. On first use, choose **Yes** to download and verify the WFE package from its maintainer and extract it into `MagicKey-WFE` under the game directory. Choose **No** to browse for an existing `WFEApp.exe`. [WFE release](https://github.com/UnryzeC/WFE-Release/releases/tag/v3.1.14.93)
+2. Confirm the settings change. MagicKey configures WFE's active profile automatically and writes `WFEConfig.ini` next to the selected game executable. For example, `D:\play\war3\war3.exe` produces `D:\play\war3\WFEConfig.ini`. Other settings in either file are preserved.
 3. Open WFE and use its **Launch** with **Auto-inject** enabled. Start a match and look for a mana bar above a hero with mana. This setting applies to heroes across maps, including other visible heroes. To turn it off, repeat step 2 and confirm disabling it.
 
 WFE draws the bars inside the game and must load before the match. Current WFE uses the active profile in its own `Profiles` folder. The game-folder copy is also written for setups that expect `WFEConfig.ini` beside the game executable.

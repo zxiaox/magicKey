@@ -117,14 +117,7 @@ std::string getText(const std::string& url, bool metadata, std::size_t limit, co
     request(toWide(url), metadata, limit, cancelled, [&](const char* data, std::size_t count) { result.append(data, count); });
     return result;
 }
-std::string verifyExecutable(const std::filesystem::path& path, const std::string& expected) {
-    std::ifstream input(path, std::ios::binary);
-    if (!input) throw Error(Failure::InvalidDownload);
-    std::vector<unsigned char> header(65536);
-    input.read(reinterpret_cast<char*>(header.data()), std::streamsize(header.size()));
-    header.resize(std::size_t(input.gcount()));
-    if (!isX64Executable(header)) throw Error(Failure::InvalidDownload);
-    input.clear(); input.seekg(0);
+std::string verifyHash(std::ifstream& input, const std::string& expected) {
     std::vector<unsigned char> object;
     struct Cng {
         BCRYPT_ALG_HANDLE algorithm = nullptr;
@@ -151,19 +144,81 @@ std::string verifyExecutable(const std::filesystem::path& path, const std::strin
     if (hex.str() != normalizeHash(expected)) throw Error(Failure::Checksum);
     return hex.str();
 }
-std::filesystem::path makeStaging() {
-    const auto folder = executablePath().parent_path();
+std::string verifyExecutable(const std::filesystem::path& path, const std::string& expected) {
+    std::ifstream input(path, std::ios::binary);
+    if (!input) throw Error(Failure::InvalidDownload);
+    std::vector<unsigned char> header(65536);
+    input.read(reinterpret_cast<char*>(header.data()), std::streamsize(header.size()));
+    header.resize(std::size_t(input.gcount()));
+    if (!isX64Executable(header)) throw Error(Failure::InvalidDownload);
+    input.clear(); input.seekg(0);
+    return verifyHash(input, expected);
+}
+std::filesystem::path makeStaging(const std::filesystem::path& folder, const wchar_t* prefix) {
     for (int attempt = 0; attempt < 5; ++attempt) {
         unsigned char random[12];
         if (BCryptGenRandom(nullptr, random, sizeof(random), BCRYPT_USE_SYSTEM_PREFERRED_RNG)) throw Error(Failure::Install);
         std::wostringstream name;
-        name << L".MagicKey-update-";
+        name << prefix;
         for (unsigned char byte : random) name << std::hex << std::setfill(L'0') << std::setw(2) << unsigned(byte);
         auto path = folder / name.str();
         if (CreateDirectoryW(path.c_str(), nullptr)) return path;
         if (GetLastError() != ERROR_ALREADY_EXISTS) throw Error(Failure::NotWritable);
     }
     throw Error(Failure::NotWritable);
+}
+std::filesystem::path installWfePackage(const std::filesystem::path& destination, const std::atomic<bool>& cancelled) {
+    constexpr auto url = L"https://github.com/UnryzeC/WFE-Release/releases/download/v3.1.14.93/WFE.zip";
+    constexpr auto hash = "ec41b286eddd6e772116618a1ff8d34e981ba3cdd6ebd102c5169ccee324267e";
+    constexpr std::uint64_t size = 1249782;
+    struct Staging {
+        std::filesystem::path path;
+        ~Staging() { std::error_code ignored; std::filesystem::remove_all(path, ignored); }
+    } staging{makeStaging(destination.parent_path(), L".MagicKey-wfe-")};
+    const auto zip = staging.path / L"WFE.zip";
+    std::ofstream out(zip, std::ios::binary);
+    if (!out) throw Error(Failure::NotWritable);
+    request(url, false, size, cancelled, [&](const char* bytes, std::size_t count) {
+        if (!out.write(bytes, std::streamsize(count))) throw Error(Failure::NotWritable);
+    });
+    out.close();
+    if (!out || std::filesystem::file_size(zip) != size) throw Error(Failure::InvalidDownload);
+    std::ifstream input(zip, std::ios::binary);
+    if (!input) throw Error(Failure::InvalidDownload);
+    verifyHash(input, hash);
+    input.close();
+    checkCancelled(cancelled);
+
+    wchar_t system[MAX_PATH]{};
+    const auto length = GetSystemDirectoryW(system, MAX_PATH);
+    if (!length || length >= MAX_PATH) throw Error(Failure::Install);
+    const auto tar = std::filesystem::path(system) / L"tar.exe";
+    const auto extracted = staging.path / L"payload";
+    std::filesystem::create_directory(extracted);
+    auto command = quoteArgument(tar.native()) + L" -xf " + quoteArgument(zip.native()) +
+                   L" -C " + quoteArgument(extracted.native());
+    STARTUPINFOW startup{sizeof(startup)};
+    PROCESS_INFORMATION process{};
+    if (!CreateProcessW(tar.c_str(), command.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW,
+                        nullptr, system, &startup, &process))
+        throw Error(Failure::Install);
+    Handle extractor(process.hProcess), thread(process.hThread);
+    const auto wait = WaitForSingleObject(extractor.value, 30000);
+    DWORD exitCode = 0;
+    if (wait != WAIT_OBJECT_0) {
+        if (TerminateProcess(extractor.value, 1)) WaitForSingleObject(extractor.value, 5000);
+        throw Error(Failure::Install);
+    }
+    if (!GetExitCodeProcess(extractor.value, &exitCode) || exitCode != 0 ||
+        !std::filesystem::is_regular_file(extracted / L"WFEApp.exe") ||
+        !std::filesystem::is_regular_file(extracted / L"WFEDll.dll") ||
+        !std::filesystem::is_regular_file(extracted / L"WFESettings.ini") ||
+        !std::filesystem::is_directory(extracted / L"Profiles"))
+        throw Error(Failure::Install);
+    checkCancelled(cancelled);
+    if (!MoveFileExW(extracted.c_str(), destination.c_str(), MOVEFILE_WRITE_THROUGH))
+        throw Error(Failure::NotWritable);
+    return destination / L"WFEApp.exe";
 }
 void startProcess(const std::filesystem::path& executable, const std::wstring& arguments = L"") {
     auto command = quoteArgument(executable.native()) + (arguments.empty() ? L"" : L" " + arguments);
@@ -257,15 +312,18 @@ Result Client::take() {
     std::lock_guard<std::mutex> lock(resultMutex);
     return std::move(result);
 }
-void Client::start(HWND window, UINT message, Release release, bool downloading) {
+void Client::start(HWND window, UINT message, Job job, Release release, std::filesystem::path wfeFolder) {
     if (running.load()) return;
     if (worker.joinable()) worker.join();
     cancelled = false; running = true;
     try {
-        worker = std::thread([this, window, message, release = std::move(release), downloading]() {
+        worker = std::thread([this, window, message, job, release = std::move(release), wfeFolder = std::move(wfeFolder)]() {
             Result finished;
             try {
-                if (!downloading) {
+                if (job == Job::InstallWfe) {
+                    finished.wfeApp = installWfePackage(wfeFolder, cancelled);
+                    finished.outcome = Outcome::WfeInstalled;
+                } else if (job == Job::Check) {
                     auto text = getText(LatestApi, true, 2 * 1024 * 1024, cancelled);
                     try { finished.release = parseRelease(text); }
                     catch (const std::exception&) { throw Error(Failure::InvalidRelease); }
@@ -282,7 +340,7 @@ void Client::start(HWND window, UINT message, Release release, bool downloading)
                         if (!finished.hash.empty() && finished.hash != checksum) throw Error(Failure::Checksum);
                         finished.hash = checksum;
                     }
-                    finished.staging = makeStaging();
+                    finished.staging = makeStaging(executablePath().parent_path(), L".MagicKey-update-");
                     auto file = finished.staging / L"MagicKey.new.exe";
                     std::ofstream out(file, std::ios::binary | std::ios::trunc);
                     if (!out) throw Error(Failure::NotWritable);
@@ -303,7 +361,7 @@ void Client::start(HWND window, UINT message, Release release, bool downloading)
                 finished.failure = e.failure;
                 finished.outcome = e.failure == Failure::Cancelled ? Outcome::Cancelled : Outcome::Failed;
             } catch (...) {
-                finished.failure = downloading ? Failure::InvalidDownload : Failure::InvalidRelease;
+                finished.failure = job == Job::Check ? Failure::InvalidRelease : Failure::InvalidDownload;
                 finished.outcome = Outcome::Failed;
             }
             if (finished.outcome == Outcome::Failed || finished.outcome == Outcome::Cancelled) {

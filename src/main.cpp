@@ -86,6 +86,7 @@ GameNotifications gameNotifications;
 std::atomic_bool notificationTyping{false}, cancelNotification{false};
 constexpr UINT_PTR NotificationTimer = 77;
 magickey::updates::Client updateClient;
+bool installingWfe = false;
 bool downloadingUpdate = false, closeAfterUpdate = false, silentUpdateCheck = false;
 
 const wchar_t* tr(const wchar_t* text) { return translate(text, settings.language); }
@@ -397,7 +398,7 @@ void cancelCapture() {
 }
 void updateUpdateButton() {
     const wchar_t* text = closeAfterUpdate ? L"Cancelling update..." : updateClient.busy() ?
-        (downloadingUpdate ? L"Downloading update..." : L"Checking for updates...") : L"Check for updates";
+        (installingWfe ? L"Installing WFE..." : downloadingUpdate ? L"Downloading update..." : L"Checking for updates...") : L"Check for updates";
     HMENU menu = GetSubMenu(GetMenu(window), 0);
     ModifyMenuW(menu, CheckUpdates, MF_BYCOMMAND | MF_STRING | (updateClient.busy() ? MF_GRAYED : MF_ENABLED), CheckUpdates, tr(text));
 }
@@ -410,9 +411,12 @@ void beginUpdateCheck(bool silent = false) {
 }
 void refresh();
 bool saveQuickChat(bool clear = false, int nextSlot = -1);
+void applyWarcraftMana(const std::filesystem::path& wfeApp, const std::filesystem::path& gameConfig);
 void finishUpdate() {
     using namespace magickey::updates;
     auto result = updateClient.take();
+    const bool wasInstallingWfe = installingWfe;
+    installingWfe = false;
     updateUpdateButton();
     if (closeAfterUpdate) {
         discardStaging(result.staging);
@@ -441,7 +445,13 @@ void finishUpdate() {
             try { launchInstaller(result, settings.language); DestroyWindow(window); }
             catch (...) { discardStaging(result.staging); refresh(); error(failureMessage(Failure::Install)); }
             break;
-        case Outcome::Failed: if (!silentUpdateCheck || downloadingUpdate) error(failureMessage(result.failure)); break;
+        case Outcome::WfeInstalled:
+            applyWarcraftMana(result.wfeApp, result.wfeApp.parent_path().parent_path() / L"WFEConfig.ini");
+            break;
+        case Outcome::Failed:
+            if (wasInstallingWfe) error(L"Could not install WFE. Check your connection and that the Warcraft III folder is writable.");
+            else if (!silentUpdateCheck || downloadingUpdate) error(failureMessage(result.failure));
+            break;
         case Outcome::Cancelled: break;
     }
 }
@@ -619,7 +629,7 @@ void makeInterface() {
     control(L"STATIC",L"Original Key",0,0,360,242,190,22);
     control(L"STATIC",L"New Key",0,0,568,242,190,22);
     control(L"SCROLLBAR",L"",SBS_VERT,MapScroll,854,270,16,156);
-    control(L"STATIC",L"Multi-Key Combinations (click + to add keys)",0,0,44,454,680,22);
+    control(L"STATIC",L"Multi-key combination (click + to add keys; right-click to clear settings)",0,0,44,454,680,22);
     control(L"BUTTON",L"Add row",WS_TABSTOP,416,740,446,114,30);
     control(L"SCROLLBAR",L"",SBS_VERT,ComboScroll,854,484,16,88);
     control(L"BUTTON",L"Quick Chat Settings",WS_TABSTOP,QuickChatOpen,482,656,182,38);
@@ -695,6 +705,10 @@ void launchWarcraft() {
 }
 
 void configureWarcraftMana() {
+    if (updateClient.busy()) {
+        error(L"Please wait for the current download or update check to finish.");
+        return;
+    }
     const auto title = tr(L"Hero Mana...");
     std::error_code problem;
     auto exe = std::filesystem::absolute(enteredWarcraftPath(), problem);
@@ -718,9 +732,32 @@ void configureWarcraftMana() {
         magickey::centeredMessageBox(window, prompt.c_str(), title, MB_OK | MB_ICONINFORMATION);
         return;
     }
-    const auto gameConfig = exe.parent_path() / L"WFEConfig.ini";
-    prompt += tr(L"This build supports WFE. Close Warcraft III and WFE, then select WFEApp.exe from the extracted WFE folder. Continue?");
-    if (magickey::centeredMessageBox(window, prompt.c_str(), title, MB_YESNO | MB_ICONINFORMATION) != IDYES) return;
+    const auto folder = exe.parent_path();
+    const auto gameConfig = folder / L"WFEConfig.ini";
+    const auto wfeFolder = folder / L"MagicKey-WFE";
+    const auto wfeApp = wfeFolder / L"WFEApp.exe";
+    if (magickey::activeWfeProfile(wfeApp)) {
+        applyWarcraftMana(wfeApp, gameConfig);
+        return;
+    }
+    prompt += tr(L"Close Warcraft III and WFE before setup. Download WFE from its maintainer and extract it to this folder?");
+    prompt += L"\n\n" + wfeFolder.wstring() + L"\n\n" + tr(L"Choose No to browse for a copy you already have.");
+    const int choice = magickey::centeredMessageBox(window, prompt.c_str(), title, MB_YESNOCANCEL | MB_ICONQUESTION);
+    if (choice == IDYES) {
+        if (std::filesystem::exists(wfeFolder, problem) || problem) {
+            error(L"The MagicKey-WFE folder already exists or cannot be accessed. Choose an existing WFEApp.exe instead.");
+            return;
+        }
+        try {
+            updateClient.installWfe(window, UpdateFinished, wfeFolder);
+            installingWfe = true;
+            updateUpdateButton();
+        } catch (...) {
+            error(L"Could not install WFE. Check your connection and that the Warcraft III folder is writable.");
+        }
+        return;
+    }
+    if (choice != IDNO) return;
 
     std::array<wchar_t, 32768> path{};
     OPENFILENAMEW file{sizeof(file)};
@@ -738,13 +775,19 @@ void configureWarcraftMana() {
         }
     }
 
-    const auto profile = magickey::activeWfeProfile(std::filesystem::path(path.data()));
+    applyWarcraftMana(std::filesystem::path(path.data()), gameConfig);
+}
+
+void applyWarcraftMana(const std::filesystem::path& wfeApp, const std::filesystem::path& gameConfig) {
+    const auto title = tr(L"Hero Mana...");
+    const auto profile = magickey::activeWfeProfile(wfeApp);
     if (!profile) {
         error(L"Could not find the active WFE profile. Extract the complete WFE ZIP and select its WFEApp.exe.");
         return;
     }
     const bool enabled = magickey::wfeHeroManaEnabled(gameConfig).value_or(false);
-    prompt = gameConfig.wstring() + L"\n" + profile->wstring() + L"\n\n";
+    auto prompt = gameConfig.wstring() + L"\n" + profile->wstring() + L"\n\n";
+    prompt += tr(L"Close Warcraft III and WFE before changing these settings.") + std::wstring(L"\n\n");
     prompt += tr(enabled ? L"Turn off hero mana bars in these WFE settings?" : L"Turn on overhead mana bars for heroes in these WFE settings?");
     if (magickey::centeredMessageBox(window, prompt.c_str(), title, MB_YESNO | MB_DEFBUTTON2 | MB_ICONQUESTION) != IDYES) return;
     if (!magickey::saveWfeHeroMana(*profile, !enabled)) {
@@ -755,9 +798,9 @@ void configureWarcraftMana() {
         error(L"The WFE profile was saved, but WFEConfig.ini could not be written to the Warcraft III folder. Check its permissions and try again.");
         return;
     }
-    magickey::centeredMessageBox(window,
-        tr(L"WFE settings saved in both folders. Open WFE and launch Warcraft III with Auto-inject enabled."),
-        title, MB_OK | MB_ICONINFORMATION);
+    prompt = tr(L"WFE settings saved. Open WFE and launch Warcraft III with Auto-inject enabled.");
+    prompt += L"\n\n" + wfeApp.wstring();
+    magickey::centeredMessageBox(window, prompt.c_str(), title, MB_OK | MB_ICONINFORMATION);
 }
 
 void loadQuickChatSlot(bool loadText = true) {
