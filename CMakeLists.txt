@@ -6,6 +6,20 @@ if(MSVC)
   set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
   add_compile_options(/utf-8)
 endif()
+if(WIN32 AND CMAKE_GENERATOR MATCHES "^Visual Studio")
+  include(ExternalProject)
+  set(MAGICKEY_MANA_PLUGIN "${CMAKE_CURRENT_BINARY_DIR}/mana-plugin/Release/MagicKeyMana.mix")
+  ExternalProject_Add(MagicKeyManaBuild
+    SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/warcraft_mana_plugin"
+    BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/mana-plugin"
+    CMAKE_GENERATOR "${CMAKE_GENERATOR}"
+    CMAKE_GENERATOR_PLATFORM Win32
+    BUILD_COMMAND "${CMAKE_COMMAND}" --build <BINARY_DIR> --config Release
+    BUILD_BYPRODUCTS "${MAGICKEY_MANA_PLUGIN}"
+    BUILD_ALWAYS TRUE
+    INSTALL_COMMAND ""
+    EXCLUDE_FROM_ALL TRUE)
+endif()
 configure_file(cmake/app_config.hpp.in generated/app_config.hpp @ONLY)
 configure_file(src/app.manifest.in generated/app.manifest @ONLY)
 configure_file(THIRD-PARTY-NOTICES.txt generated/THIRD-PARTY-NOTICES.txt COPYONLY)
@@ -14,6 +28,12 @@ configure_file(assets/warcraft-frozen-throne.jpg generated/warcraft-frozen-thron
 if(WIN32)
   enable_language(RC)
   add_executable(MagicKey WIN32 src/main.cpp src/updater.cpp src/theme_ui.cpp src/game_notifications.cpp src/clipboard_text.cpp src/app_identity.cpp src/app.rc)
+  if(MAGICKEY_MANA_PLUGIN)
+    if(TARGET MagicKeyManaBuild)
+      add_dependencies(MagicKey MagicKeyManaBuild)
+    endif()
+    set_source_files_properties(src/app.rc PROPERTIES OBJECT_DEPENDS "${MAGICKEY_MANA_PLUGIN}")
+  endif()
   target_include_directories(MagicKey PRIVATE src third_party "${CMAKE_CURRENT_BINARY_DIR}/generated")
   target_compile_definitions(MagicKey PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX _WIN32_WINNT=0x0A00)
   target_link_libraries(MagicKey PRIVATE comctl32 comdlg32 user32 gdi32 winhttp bcrypt shell32 dwmapi uxtheme gdiplus shlwapi propsys ole32 version)

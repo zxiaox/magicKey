@@ -29,9 +29,11 @@ The app recognizes `War3.exe`, `Warcraft III.exe`, and `Warcraft III Reforged.ex
 
 ## Overhead hero mana in Classic Warcraft III
 
-**Hero Mana…** next to the Warcraft III launcher reads the local `Game.dll` version and reports whether the build is supported. This integration recognizes **1.24e** (1.24.4.6387), **1.26a** (1.26.0.6401), **1.27a** (1.27.0.52240), and **1.27b** (1.27.1.7085). Other builds are unavailable through this integration.
+For the experimental standalone renderer, select **1.27a** `war3.exe` (`Game.dll` **1.27.0.52240**) and check **Enable hero mana bars** before launching. MagicKey installs its embedded 32-bit `MagicKeyMana.mix` beside `war3.exe`. On the next start, Warcraft loads the plugin, which adds a mana bar beneath the health bar of your own heroes whenever their health bars are visible. Close the game and uncheck the box to remove the plugin. The renderer uses the game's stat bar interface and has no map setup or WFE dependency. This preview needs gameplay validation.
 
-1. Close Warcraft III and WFE, select the Warcraft III executable in MagicKey, and click **Hero Mana…**. On first use, choose **Yes** to download and verify the WFE package from its maintainer and extract it into `MagicKey-WFE` under the game directory. Choose **No** to browse for an existing `WFEApp.exe`. [WFE release](https://github.com/UnryzeC/WFE-Release/releases/tag/v3.1.14.93)
+**WFE setup…** remains available for **1.24e** (1.24.4.6387), **1.26a** (1.26.0.6401), **1.27a** (1.27.0.52240), and **1.27b** (1.27.1.7085).
+
+1. Close Warcraft III and WFE, select the Warcraft III executable in MagicKey, and click **WFE setup…**. On first use, choose **Yes** to download and verify the WFE package from its maintainer and extract it into `MagicKey-WFE` under the game directory. Choose **No** to browse for an existing `WFEApp.exe`. [WFE release](https://github.com/UnryzeC/WFE-Release/releases/tag/v3.1.14.93)
 2. Confirm the settings change. MagicKey configures WFE's active profile automatically and writes `WFEConfig.ini` next to the selected game executable. For example, `D:\play\war3\war3.exe` produces `D:\play\war3\WFEConfig.ini`. Other settings in either file are preserved.
 3. Open WFE and use its **Launch** with **Auto-inject** enabled. Start a match and look for a mana bar above a hero with mana. This setting applies to heroes across maps, including other visible heroes. To turn it off, repeat step 2 and confirm disabling it.
 

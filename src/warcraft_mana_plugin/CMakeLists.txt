@@ -1,0 +1,11 @@
+cmake_minimum_required(VERSION 3.20)
+project(MagicKeyMana LANGUAGES CXX)
+if(NOT WIN32 OR NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
+  message(FATAL_ERROR "MagicKeyMana requires a 32-bit Windows toolchain")
+endif()
+add_library(MagicKeyMana SHARED mana.cpp)
+set_target_properties(MagicKeyMana PROPERTIES PREFIX "" SUFFIX ".mix"
+  MSVC_RUNTIME_LIBRARY "MultiThreaded")
+target_compile_features(MagicKeyMana PRIVATE cxx_std_17)
+target_compile_definitions(MagicKeyMana PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_link_libraries(MagicKeyMana PRIVATE version)

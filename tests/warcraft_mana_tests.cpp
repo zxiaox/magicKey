@@ -1,4 +1,5 @@
 #include "../src/warcraft_mana.hpp"
+#include "../src/warcraft_mana_install.hpp"
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
@@ -39,6 +40,17 @@ int main() {
         require(version == WarcraftVersion{1, 27, 0, 52240} && supportsWarcraftMana(*version), "1.27a not recognized");
         require(!supportsWarcraftMana({1, 27, 0, 5224}), "Unknown build should not be accepted");
         require(!supportsWarcraftMana({1, 20, 4, 6074}), "Unsupported patch should not be accepted");
+        require(supportsNativeWarcraftMana(*version) && !supportsNativeWarcraftMana({1, 27, 1, 7085}),
+                "Standalone support should be limited to the exact 1.27a build");
+        const auto native = folder / L"MagicKeyMana.mix";
+        constexpr char payload[] = "test plugin bytes";
+        const ManaPlugin plugin{payload, sizeof(payload)};
+        require(manaPluginState(native, plugin) == ManaPluginState::Missing, "Unexpected existing plugin");
+        require(installManaPlugin(native, plugin), "Could not install plugin");
+        require(manaPluginState(native, plugin) == ManaPluginState::Installed, "Installed bytes did not match");
+        std::ofstream(native) << "existing third-party content";
+        require(!installManaPlugin(native, plugin), "Installation replaced an existing file");
+        require(manaPluginState(native, plugin) == ManaPluginState::Foreign, "Unrecognized plugin was accepted");
 
         auto profile = folder / L"诸葛亮.ini";
         std::ofstream(profile, std::ios::binary) << "[CUSTOMBARS]\r\nISENABLED = no\r\n"

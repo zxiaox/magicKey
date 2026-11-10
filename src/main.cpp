@@ -18,6 +18,7 @@
 #include "app_identity.hpp"
 #include "window_position.hpp"
 #include "warcraft_mana.hpp"
+#include "warcraft_mana_install.hpp"
 
 using namespace mywarkey;
 constexpr UINT ToggleMessage = WM_APP + 1, InputError = WM_APP + 2, CapturedKey = WM_APP + 3, UpdateFinished = WM_APP + 4, ProfileSwitch = WM_APP + 5, QuickChatSend = WM_APP + 6;
@@ -29,6 +30,7 @@ constexpr int ComboStride = 11;
 constexpr int WarcraftPath = 504, WarcraftBrowse = 505, WarcraftLaunch = 506;
 constexpr int UsageTitle = 507, UsageValue = 508, ResetUsage = 509;
 constexpr int WarcraftMana = 510;
+constexpr int NativeWarcraftMana = 511;
 HWND warcraftPathEdit;
 bool savingWarcraftPath=false;
 bool saveWarcraftPath();
@@ -410,6 +412,7 @@ void beginUpdateCheck(bool silent = false) {
     updateUpdateButton();
 }
 void refresh();
+void refreshNativeWarcraftMana();
 bool saveQuickChat(bool clear = false, int nextSlot = -1);
 void applyWarcraftMana(const std::filesystem::path& wfeApp, const std::filesystem::path& gameConfig);
 void finishUpdate() {
@@ -460,6 +463,7 @@ void refresh() {
     refreshUsage(awakeMilliseconds());
     refreshMenus();
     if (GetFocus()!=warcraftPathEdit) SetWindowTextW(warcraftPathEdit,wide(settings.warcraftPath).c_str());
+    refreshNativeWarcraftMana();
     updateCaptureButtons();
     SendMessageW(profileBox, CB_RESETCONTENT, 0, 0);
     for (std::size_t i = 0; i < settings.profiles.size(); ++i) {
@@ -639,12 +643,13 @@ void makeInterface() {
     SendMessageW(speed,TBM_SETPAGESIZE,0,10);
     control(L"STATIC",L"",0,SequenceValue,680,574,174,20);
     control(L"STATIC",L"Warcraft III",0,0,44,620,112,20);
-    warcraftPathEdit=control(L"EDIT",L"",WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP,WarcraftPath,160,614,318,28);
+    warcraftPathEdit=control(L"EDIT",L"",WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP,WarcraftPath,160,614,225,28);
     SendMessageW(warcraftPathEdit,EM_SETLIMITTEXT,32767,0);
     SendMessageW(warcraftPathEdit,EM_SETCUEBANNER,TRUE,LPARAM(tr(L"Select war3.exe")));
-    control(L"BUTTON",L"Browse...",WS_TABSTOP,WarcraftBrowse,490,612,96,32);
-    control(L"BUTTON",L"Hero Mana...",WS_TABSTOP,WarcraftMana,598,612,120,32);
-    control(L"BUTTON",L"Launch",WS_TABSTOP,WarcraftLaunch,730,612,124,32);
+    control(L"BUTTON",L"Browse...",WS_TABSTOP,WarcraftBrowse,395,612,85,32);
+    control(L"BUTTON",L"WFE setup...",WS_TABSTOP,WarcraftMana,490,612,100,32);
+    control(L"BUTTON",L"Enable hero mana bars",BS_AUTOCHECKBOX | WS_TABSTOP,NativeWarcraftMana,600,612,176,32);
+    control(L"BUTTON",L"Launch",WS_TABSTOP,WarcraftLaunch,784,612,70,32);
     statusLabel = control(L"STATIC",L"",0,0,58,664,320,22);
     SendMessageW(statusLabel,WM_SETFONT,WPARAM(font),TRUE);
     toggleButton = control(L"BUTTON",L"",WS_TABSTOP,Toggle,676,656,178,38);
@@ -662,6 +667,47 @@ std::wstring enteredWarcraftPath() {
     if (text.size()>1 && text.front()==L'"' && text.back()==L'"') text=text.substr(1,text.size()-2);
     return text;
 }
+
+std::filesystem::path nativeManaDestination() {
+    const auto entered = enteredWarcraftPath();
+    if (entered.empty()) return {};
+    std::error_code problem;
+    const auto exe = std::filesystem::absolute(entered, problem);
+    if (problem || _wcsicmp(exe.filename().c_str(), L"war3.exe") != 0 ||
+        !std::filesystem::is_regular_file(exe, problem))
+        return {};
+    const auto version = magickey::warcraftVersion(exe.parent_path() / L"Game.dll");
+    if (!version || !magickey::supportsNativeWarcraftMana(*version)) return {};
+    return exe.parent_path() / L"MagicKeyMana.mix";
+}
+
+void refreshNativeWarcraftMana() {
+    const auto box = GetDlgItem(window, NativeWarcraftMana);
+    if (!box) return;
+    const auto plugin = magickey::embeddedManaPlugin();
+    const auto path = plugin ? nativeManaDestination() : std::filesystem::path{};
+    EnableWindow(box, !path.empty());
+    const bool installed = !path.empty() && magickey::manaPluginState(path, plugin) == magickey::ManaPluginState::Installed;
+    SendMessageW(box, BM_SETCHECK, installed ? BST_CHECKED : BST_UNCHECKED, 0);
+}
+
+void toggleNativeWarcraftMana() {
+    const auto path = nativeManaDestination();
+    const auto plugin = magickey::embeddedManaPlugin();
+    const bool enable = IsDlgButtonChecked(window, NativeWarcraftMana) == BST_CHECKED;
+    if (!path.empty() && plugin && saveWarcraftPath()) {
+        const auto state = magickey::manaPluginState(path, plugin);
+        if (state == magickey::ManaPluginState::Foreign) {
+            error(L"MagicKeyMana.mix already exists and differs from this build. Move it out of the Warcraft folder before trying again.");
+        } else if (enable && state == magickey::ManaPluginState::Missing && !magickey::installManaPlugin(path, plugin)) {
+            error(L"Could not install the mana bar plugin. Check that the Warcraft III folder is writable.");
+        } else if (!enable && state == magickey::ManaPluginState::Installed && !DeleteFileW(path.c_str())) {
+            error(L"Could not remove the mana bar plugin. Close Warcraft III and try again.");
+        }
+    }
+    refreshNativeWarcraftMana();
+}
+
 bool saveWarcraftPath() {
     if (!warcraftPathEdit) return true;
     if (savingWarcraftPath) return false;
@@ -906,7 +952,7 @@ void openQuickChat() {
 void command(int id, int notification) {
     if (id==WarcraftPath) {
         if (notification==EN_CHANGE) EnableWindow(GetDlgItem(window,WarcraftLaunch),GetWindowTextLengthW(warcraftPathEdit)>0);
-        if (notification==EN_KILLFOCUS) saveWarcraftPath();
+        if (notification==EN_KILLFOCUS) { saveWarcraftPath(); refreshNativeWarcraftMana(); }
         return;
     }
     if (buildingRows) return;
@@ -967,6 +1013,7 @@ void command(int id, int notification) {
     if (id == WarcraftBrowse) { browseWarcraft(); return; }
     if (id == WarcraftLaunch) { launchWarcraft(); return; }
     if (id == WarcraftMana) { configureWarcraftMana(); return; }
+    if (id == NativeWarcraftMana) { toggleNativeWarcraftMana(); return; }
     if (id == QuickChatOpen) { openQuickChat(); return; }
     if (id == NotificationDiagnostics) { magickey::centeredMessageBox(window, gameNotifications.diagnostics().c_str(), tr(L"Notification diagnostics"), MB_OK | MB_ICONINFORMATION); return; }
     if (id == CheckUpdates) { beginUpdateCheck(); return; }

@@ -2,6 +2,9 @@
 #include "app_config.hpp"
 101 ICON "MagicKey.ico"
 102 RCDATA "warcraft-frozen-throne.jpg"
+#ifdef MAGICKEY_MANA_PLUGIN
+103 RCDATA MAGICKEY_MANA_PLUGIN
+#endif
 1 RT_MANIFEST "app.manifest"
 2 RCDATA "THIRD-PARTY-NOTICES.txt"
 STRINGTABLE

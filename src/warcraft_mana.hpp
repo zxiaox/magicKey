@@ -33,6 +33,10 @@ inline bool supportsWarcraftMana(const WarcraftVersion& version) {
            version == WarcraftVersion{1, 27, 1, 7085};
 }
 
+inline bool supportsNativeWarcraftMana(const WarcraftVersion& version) {
+    return version == WarcraftVersion{1, 27, 0, 52240};
+}
+
 inline std::optional<bool> wfeHeroManaEnabled(const std::filesystem::path& profile) {
     wchar_t bars[16]{}, mana[16]{}, heroes[16]{};
     GetPrivateProfileStringW(L"CUSTOMBARS", L"ISENABLED", L"", bars, 16, profile.c_str());
