@@ -1,7 +1,9 @@
-# MagicKey v1.15.0
+# MagicKey v1.15.1
 
-**Hero Mana…** now configures the active Warcraft Feature Extender (WFE) profile automatically and writes `WFEConfig.ini` beside the selected Warcraft III executable. For example, selecting `D:\play\war3\war3.exe` writes `D:\play\war3\WFEConfig.ini`. MagicKey preserves unrelated settings in existing files.
+**Hero Mana…** now offers to download Warcraft Feature Extender (WFE) directly from its maintainer. Select the Warcraft III executable, click **Hero Mana…**, and choose **Yes**. MagicKey verifies the archive and extracts it into the `MagicKey-WFE` subfolder next to `war3.exe`. Choose **No** to browse for an existing WFE installation. [WFE package](https://github.com/UnryzeC/WFE-Release/releases/tag/v3.1.14.93)
 
-With Warcraft III and WFE closed, select your game executable in MagicKey, click **Hero Mana…**, and choose the extracted `WFEApp.exe`. Confirm the change, then open WFE and launch Warcraft III with **Auto-inject** enabled. MagicKey recognizes Classic patches **1.24e, 1.26a, 1.27a (1.27.0.52240), and 1.27b**. Windows tests cover version detection and configuration writes. In-game rendering still needs testing. [Download WFE](https://github.com/UnryzeC/WFE-Release/releases)
+Confirm the mana setting change, then open the installed `WFEApp.exe` and launch Warcraft III from WFE with **Auto-inject** enabled. MagicKey writes `WFEConfig.ini` beside `war3.exe` and updates the active WFE profile. In-game rendering still needs testing.
+
+The multi-key combination heading now explains how to add keys and clear settings with a right-click.
 
 Use **Settings → Check for updates** or download the Windows portable ZIP below.
